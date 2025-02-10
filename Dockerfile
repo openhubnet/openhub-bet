@@ -17,7 +17,7 @@ COPY . .
 RUN yarn build
 
 # 启动 NestJS 应用
-CMD ["npm", "run", "start:prod"]
+#CMD ["npm", "run", "start:prod"]
 
 # 容器暴露的端口
-EXPOSE 8900
+#EXPOSE 8900

@@ -19,7 +19,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "docker:build": "docker build -t chain-observer .",
+    "docker:build": "docker build -t bigdata .",
     "docker:run:local": "docker run -itd -v D:\\app\\safebox-db:/data chain-observer yarn start:prod"
   },
   "dependencies": {

@@ -24,7 +24,8 @@ import { ConfigService } from '@nestjs/config';
 import { SolanaSlot } from '../entities/SolanaSlot';
 import { Buffer } from 'buffer';
 import { InjectRepository } from '@nestjs/typeorm';
-
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class ScanService{
@@ -49,6 +50,7 @@ export class ScanService{
     private readonly pfCreateRepository: Repository<PfCreate>,
     @InjectRepository(PfTrade)
     private readonly pfTradeRepository: Repository<PfTrade>,
+    private readonly httpService: HttpService
   ) {
     this.provider = new Connection(this.configService.get("SOLANA_URL"), {commitment:"confirmed", wsEndpoint: this.configService.get("SOLANA_WSS")})
     this.eventParser = new EventParser()
@@ -107,6 +109,29 @@ export class ScanService{
     return null;
   }
 
+  async getBlock(slot:number){
+    const params = {
+      id: slot,
+      jsonrpc: "2.0",
+      method: "getBlock",
+      params: [
+        slot,
+        {
+          encoding: "json",
+          maxSupportedTransactionVersion: 0,
+          transactionDetails: "full",
+          rewards: false
+        }
+      ]
+    }
+    const config = {
+        headers: {
+          'Content-Type':"application/json"
+        }
+      }
+    return await firstValueFrom(this.httpService.post(this.configService.get("SOLANA_URL"), params, config))
+  }
+
   async parseTx(txHash: string) {
     const transaction = await this.provider.getParsedTransaction(txHash, { maxSupportedTransactionVersion: 0 });
     //console.log(transaction);
@@ -127,6 +152,8 @@ export class ScanService{
   async parseBlock(slot:number){
     const start = process.hrtime();
     const resp = await this.provider.getBlock(slot, { maxSupportedTransactionVersion: 0, rewards: false })
+    //const resp = await this.getBlock(slot)
+    //console.log("resp",resp.data.id)
     this.logger.log(`Parse block: slot:${slot},blockTime:${resp.blockTime},txSize:${resp.transactions.length}`)
     const bucket = new DataBucket(slot);
     for (let i = 0; i < resp.transactions.length; i++) {

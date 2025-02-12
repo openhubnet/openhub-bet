@@ -11,6 +11,12 @@ export class AppController {
     private readonly scanService: ScanService,
   ) {}
 
+  //
+  @Get('/health')
+  async health(): Promise<Result> {
+    return respDefault()
+  }
+
   @Get('/refreshBlockNumber')
   async refreshBlockNumber(): Promise<Result> {
     this.scanService.refreshBlockNumber()

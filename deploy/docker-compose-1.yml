@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  bigdata:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "9000:9000"
+    #env_file:
+    #  - .env
+    volumes:
+      - /d/workspace5/openhub-bigdata/deploy/.env:/app/dist/.env
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/health"]
+      interval: 30s
+      retries: 3
+      start_period: 5s
+      timeout: 5s

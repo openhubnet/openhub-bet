@@ -38,5 +38,5 @@ lerna-debug.log*
 yarn.lock
 data/
 .env.development
-.env.production
+.env.production22
 .env.mac2

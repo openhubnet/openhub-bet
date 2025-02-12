@@ -15,10 +15,12 @@ import { BullQueueName } from './config/constants';
 import { SolanaSlot } from './entities/SolanaSlot';
 import { WorkerService } from './service/worker.service';
 import { BullModule } from '@nestjs/bullmq';
+import { HttpModule } from '@nestjs/axios';
 const env = process.env.NODE_ENV || 'development'; // 默认加载 development 环境
 
 @Module({
   imports: [
+    HttpModule,
     ConfigModule.forRoot({
       envFilePath: ['.env', `.env.${env}`],
     }),

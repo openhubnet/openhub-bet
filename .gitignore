@@ -40,3 +40,4 @@ data/
 .env.development
 .env.production22
 .env.mac2
+deploy

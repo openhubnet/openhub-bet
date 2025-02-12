@@ -2,15 +2,7 @@
 import { PublicKey } from "@solana/web3.js";
 
 export enum RedisKeys {
-    SYNC_TOKEN_HOT_SEARCH = 'sync:token_hot_search',
-    SYNC_TOKEN_NEW_TIMER = 'sync:token_new_timer',
-    SYNC_TOKEN_NEW_LIST = 'sync:token_new_list',
-    SYNC_TOKEN_TRENDING_TIMER = 'sync:token_trending_timer',
-    SYNC_TOKEN_TRENDING_LIST = 'sync:token_trending_list',
-    SYNC_TOKEN_TOP_TIMER = 'sync:token_top_timer',
-    SYNC_TOKEN_GENERATED_TIMER = 'sync:token_generated_timer',
-    SYNC_TOKEN_LIST_TIMER = 'sync:token_list_timer',
-    PREFIX_OF_REFRESH_TOKEN_META = 'refresh_token_meta:',
+    INSERT_DATA_BUCKET_LOCK = 'insert_data_bucket_lock:',
 }
 
 
@@ -35,10 +27,12 @@ export enum BullQueueName{
     SLOT_QUEUE = "SLOT_QUEUE",
     PREFIX = "BULL",
     JOB_ID = "jobId",
+    LOG_JOB_ID = "logJobId",
 }
 
 export enum BullTaskName{
-    SLOT_TASK = "SLOT_TASK"
+    SLOT_TASK = "SLOT_TASK",
+    LOG_SUBSCRIBE_TASK = "LOG_SUBSCRIBE_TASK"
 }
 
 export enum ExchangeName{

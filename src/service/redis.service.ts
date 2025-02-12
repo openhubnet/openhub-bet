@@ -100,7 +100,7 @@ export class RedisService {
 
   }
 
-  public prefix(name:string|number): string {
+  public combineKeyWithPrefix(name:string|number): string {
     return `${this.keyPrefix}:${name}`;
   }
 

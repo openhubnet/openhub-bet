@@ -28,12 +28,18 @@ export class TaskService implements OnModuleInit{
   }
 
   @Timeout(1000)
-  REFRESH_BLOCK() {
-   this.addCronJob("REFRESH_BLOCK_JOB","*/30 * * * * *", ()=>this.scanService.refreshBlockNumber())
+  refresh_block() {
+   //this.addCronJob("REFRESH_BLOCK_JOB","*/30 * * * * *", ()=>this.scanService.refreshBlockNumber())
   }
 
   @Timeout(1000)
-  REFRESH_TASK() {
-    this.addCronJob("REFRESH_TASK_JOB","*/5 * * * * *", ()=>this.scanService.sendTask())
+  refresh_task() {
+    //this.addCronJob("REFRESH_TASK_JOB","*/5 * * * * *", ()=>this.scanService.sendTask())
   }
+
+  @Timeout(1000)
+  listener_log() {
+    this.scanService.listenerLog()
+  }
+
 }

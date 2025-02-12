@@ -19,17 +19,16 @@ export class WorkerService extends WorkerHost implements OnModuleInit{
   }
   async process(job: Job, token: string | undefined): Promise<any> {
       if (job.name === BullTaskName.SLOT_TASK) {
-/*        await Utils.sleep(5000).then(()=>{
-          //console.log(`${job.id} done`)
-        });*/
         await this.scanService.parseBlock(job.data)
+      }else if(job.name === BullTaskName.LOG_SUBSCRIBE_TASK){
+        await this.scanService.saveDataBucketWithDistributedLock(job.data, job.id)
       }
       return Promise.resolve(job.id);
   }
 
   @OnWorkerEvent('active')
   onActive(job: Job) {
-   // this.logger.log(`Processing job ${job.id} of type ${job.name} with data ${job.data}`,);
+   this.logger.log(`Processing job ${job.id} of type ${job.name}`,);
   }
 
   @OnWorkerEvent('completed')

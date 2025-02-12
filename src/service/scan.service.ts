@@ -19,7 +19,7 @@ import { DataBucket } from '../dto/DataBucket';
 import { PfCreate } from '../entities/PfCreate';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { BullQueueName, BullTaskName } from '../config/constants';
+import { BullQueueName, BullTaskName, RedisKeys } from '../config/constants';
 import { ConfigService } from '@nestjs/config';
 import { SolanaSlot } from '../entities/SolanaSlot';
 import { Buffer } from 'buffer';
@@ -164,7 +164,7 @@ export class ScanService{
     }
     await this.saveDataBucket(bucket)
     const end = process.hrtime(start);
-    this.logger.log(`Parse block: slot:${slot},cost: ${end[0]+'.'+end[1]+'s'} tradeEvent: ${bucket.getPfTradeList().length}, createEvent: ${bucket.getPfCreateList().length}`)
+    this.logger.log(`Parse block: slot:${slot},cost: ${end[0]+'.'+end[1]+'s'} tradeEvent: ${bucket.pfTradeList.length}, createEvent: ${bucket.pfCreateList.length}`)
   }
 
 
@@ -383,49 +383,44 @@ export class ScanService{
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      if(bucket.getPfTradeList().length > 0){
-        await queryRunner.manager.insert(PfTrade, bucket.getPfTradeList())
+      if(bucket.pfTradeList.length > 0){
+        await queryRunner.manager.insert(PfTrade, bucket.pfTradeList)
       }
-      if(bucket.getPfCreateList().length > 0){
-        await queryRunner.manager.insert(PfCreate, bucket.getPfCreateList())
+      if(bucket.pfCreateList.length > 0){
+        await queryRunner.manager.insert(PfCreate, bucket.pfCreateList)
       }
-      await queryRunner.manager.update(SolanaSlot, {id: bucket.getSlotId() }, { status: 1 });
+      await queryRunner.manager.update(SolanaSlot, {id: bucket.slotId }, { status: 1 });
       await queryRunner.commitTransaction();
     } catch (err) {
       this.logger.error(err.message)
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction();
+      throw err
     } finally {
       // you need to release a queryRunner which was manually instantiated
       await queryRunner.release();
     }
   }
 
-  async saveDataBucketV2(bucket:DataBucket) {
-    const tradeList =  bucket.getPfTradeSpliceList()
-    const createList = bucket.getPfCreateSpliceList()
-    this.logger.log(`bucket batch data size, tradeEvent: ${tradeList.length}, createEvent: ${createList.length}`)
-    if(tradeList.length == 0 && createList.length == 0){
+
+  async saveDataBucketWithDistributedLock(bucket:DataBucket, lockSuffix:string) {
+    const key = this.redisService.combineKeyWithPrefix(RedisKeys.INSERT_DATA_BUCKET_LOCK+lockSuffix)
+    const isLocked = await this.redisService.lockOnce(key, 10 * 1000).catch(e => {
+      this.logger.warn("save DataBucket: cannot get distributed lock");
+    });
+    if (!isLocked) {
       return
     }
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
     try {
-      if(tradeList.length > 0){
-        await queryRunner.manager.insert(PfTrade, tradeList)
+      await this.saveDataBucket(bucket)
+    } catch (err: any) {
+      //重复插入忽略
+      if(err?.message?.includes("duplicate key")){
+        //nothing todo
+      }else{
+        this.redisService.unLock(key)
+        throw err
       }
-      if(createList.length > 0){
-        await queryRunner.manager.insert(PfCreate, createList)
-      }
-      await queryRunner.commitTransaction();
-    } catch (err) {
-      this.logger.error(err.message)
-      // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
-    } finally {
-      // you need to release a queryRunner which was manually instantiated
-      await queryRunner.release();
     }
   }
 
@@ -440,6 +435,7 @@ export class ScanService{
       console.error(err);
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction();
+      throw err
     } finally {
       // you need to release a queryRunner which was manually instantiated
       await queryRunner.release();
@@ -464,18 +460,17 @@ export class ScanService{
     }
   }
 
-  async listenerLog(){
-    const bucket = new DataBucket(0);
+  listenerLog(){
     this.listenerLogSubscriptionId = this.provider.onLogs(PF_PROGRAM_ID, (txLogs: Logs, ctx: Context) => {
       if ((!ctx || !txLogs || txLogs.err !== null || !txLogs.logs || txLogs.logs.length < 3)
         || (!txLogs.signature || txLogs.signature === OPAQUE_SIGNATURE)) {
         return;
       }
-      this.eventParser.dealLogs(txLogs.logs, txLogs.signature, 0, bucket)
+      const bucket = new DataBucket(ctx.slot);
+      this.eventParser.dealLogs(txLogs.logs, txLogs.signature, ctx.slot, bucket)
+      this.slotQueue.add(BullTaskName.LOG_SUBSCRIBE_TASK, bucket, {jobId: BullQueueName.LOG_JOB_ID+":"+txLogs.signature, removeOnComplete:true, removeOnFail:false})
     });
-    setInterval(()=>{
-      this.saveDataBucketV2(bucket).catch(console.error);
-    },3000)
+
     return this.listenerLogSubscriptionId
   }
 

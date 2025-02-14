@@ -133,7 +133,7 @@ export class RedisService {
       expire,
       'NX'
     );
-    //console.debug(`lock: ${name}, result: ${result}`);
+    console.debug(`lock: ${name}, result: ${result}`);
     return result !== null;
   }
 

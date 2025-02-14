@@ -3,6 +3,12 @@ import { PublicKey } from "@solana/web3.js";
 
 export enum RedisKeys {
     INSERT_DATA_BUCKET_LOCK = 'insert_data_bucket_lock:',
+    MERGE_TRADE_LOCK = 'merge_trade_lock',
+    MERGE_TRADE_CLIP_LOCK = 'merge_trade_clip_lock',
+    MERGE_TOKEN_LOCK = 'merge_token_lock',
+    MERGE_PF_HASH_LOCK = 'merge_pf_hash_lock_',
+
+
 }
 
 

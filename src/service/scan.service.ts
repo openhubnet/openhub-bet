@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Connection, Context, Logs } from '@solana/web3.js';
+import { Connection, Context, Logs, TransactionSignature } from '@solana/web3.js';
 import { RedisService } from './redis.service';
 import {
   OPAQUE_SIGNATURE,
@@ -13,7 +13,7 @@ import {
 } from '../dto/common.dto';
 import Utils from '../utils';
 import { PfTrade } from '../entities/PfTrade';
-import { DataSource, MoreThanOrEqual, Repository } from 'typeorm';
+import { DataSource, In, MoreThanOrEqual, Repository } from 'typeorm';
 import { EventParser } from '../dto/event.parser';
 import { DataBucket } from '../dto/DataBucket';
 import { PfCreate } from '../entities/PfCreate';
@@ -26,6 +26,8 @@ import { Buffer } from 'buffer';
 import { InjectRepository } from '@nestjs/typeorm';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { UserTrade } from '../entities/UserTrade';
+import { UserToken } from 'src/entities/UserToken';
 
 @Injectable()
 export class ScanService{
@@ -50,6 +52,10 @@ export class ScanService{
     private readonly pfCreateRepository: Repository<PfCreate>,
     @InjectRepository(PfTrade)
     private readonly pfTradeRepository: Repository<PfTrade>,
+    @InjectRepository(UserTrade)
+    private readonly userTradeRepository: Repository<UserTrade>,
+    @InjectRepository(UserToken)
+    private readonly userTokenRepository: Repository<UserToken>,
     private readonly httpService: HttpService
   ) {
     this.provider = new Connection(this.configService.get("SOLANA_URL"), {commitment:"confirmed", wsEndpoint: this.configService.get("SOLANA_WSS")})
@@ -478,6 +484,267 @@ export class ScanService{
     await this.provider.removeOnLogsListener(this.listenerLogSubscriptionId)
   }
 
+  async mergeTrade(){
+    const key = this.redisService.combineKeyWithPrefix(RedisKeys.MERGE_TRADE_LOCK)
+    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
+      this.logger.warn("merge trade: cannot get distributed lock");
+    });
+    if (!isLocked) {
+      this.logger.warn("merge trade: cannot get distributed lock");
+      return
+    }
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const sql = 'SELECT ' +
+        'string_agg(a.id::TEXT, \',\') AS ids,' +
+        'a.user_adr,' +
+        'SUM(a.sol_amount) AS total_sol_amounts,' +
+        'SUM(a.token_amount) AS total_token_amounts ' +
+        'FROM (SELECT * FROM pf_trade WHERE status = 0 LIMIT 500) AS a ' +
+        'GROUP BY a.user_adr';
+      const results = await queryRunner.manager.query(sql);
+      this.logger.log(`merge trade find: ${results?.length??0}`);
+      if (results && results.length > 0) {
+        const map = new Map();
+        const adrArr = [];
+        let ids = '';
+        results.forEach(e => {
+          map.set(e.user_adr, e);
+          adrArr.push(e.user_adr);
+          ids += ',' + e.ids;
+        });
+        const updateTime = new Date()
+        const oldTrades = await this.userTradeRepository.find({ where: { userAdr: In(adrArr) } });
+        if (oldTrades && oldTrades.length > 0) {
+          for (const trade of oldTrades) {
+            const existsTrade = map.get(trade.userAdr);
+            //trade.solAmount = trade.solAmount + Number(existsTrade.total_sol_amounts)
+            //trade.tokenAmount = trade.tokenAmount + Number(existsTrade.total_token_amounts)
+            map.delete(trade.userAdr);
+           // const sql = 'UPDATE user_trade SET sol_amount=sol_amount+?,token_amount=token_amount+?,update_time=? WHERE user_adr = ?';
+           // await queryRunner.query(sql, [Number(existsTrade.total_sol_amounts), Number(existsTrade.total_token_amounts),new Date(), trade.userAdr]);
+            await queryRunner.manager.update(
+              UserTrade,
+              { userAdr: trade.userAdr},
+              { solAmount: trade.solAmount + Number(existsTrade.total_sol_amounts),
+                tokenAmount: trade.tokenAmount + Number(existsTrade.total_token_amounts),
+                updateTime: updateTime
+              }
+            );
+          }
+        }
 
+        const newTrades = [];
+        if (map.size > 0) {
+          for (const item of map.values()) {
+            const trade = new UserTrade();
+            trade.userAdr = item.user_adr;
+            trade.solAmount = Number(item.total_sol_amounts);
+            trade.tokenAmount = Number(item.total_token_amounts);
+            trade.type = 0;
+            trade.status = 0;
+            newTrades.push(trade);
+          }
+          await queryRunner.manager.insert(UserTrade, newTrades);
+        }
+
+        await queryRunner.manager.update(
+          PfTrade,
+          { id: In(ids.substring(1).split(',')) },
+          { status: 1,updateTime: updateTime },
+        );
+      }
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      this.logger.error("merge trade failed",  err.message);
+      // since we have errors lets rollback the changes we made
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release()
+      await this.redisService.unLock(key)
+    }
+
+  }
+
+
+  async mergeTradeClip(){
+    const key = this.redisService.combineKeyWithPrefix(RedisKeys.MERGE_TRADE_CLIP_LOCK)
+    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
+      this.logger.warn("merge trade clip: cannot get distributed lock");
+    });
+    if (!isLocked) {
+      return
+    }
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const sql = 'SELECT \n' +
+        'a.block_number,\n' +
+        'a.user_adr\n' +
+        'FROM (SELECT block_number,tx_id,user_adr FROM pf_trade WHERE block_number IN (SELECT DISTINCT block_number FROM pf_trade WHERE status = 1 LIMIT 1000)) AS a\n' +
+        'GROUP BY a.block_number,a.tx_id,a.user_adr\n' +
+        'HAVING COUNT(a.user_adr) > 1';
+      const results = await queryRunner.manager.query(sql);
+      this.logger.log(`merge trade clip find: ${results?.length??0}`);
+      if (results && results.length > 0) {
+        const blockArr = [];
+        const adrArr = [];
+        results.forEach(e => {
+          blockArr.push(e.block_number);
+          adrArr.push(e.user_adr);
+        });
+        const updateTime = new Date()
+        await queryRunner.manager.update(
+          PfTrade,
+          { blockNumber: In(blockArr) },
+          { status: 2, updateTime: updateTime },
+        )
+
+        await queryRunner.manager.update(
+          UserTrade,
+          { userAdr: In(adrArr) },
+          { type: 1, updateTime: updateTime },
+        )
+      }
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      this.logger.error("merge trade clip failed", err.message);
+      // since we have errors lets rollback the changes we made
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release()
+      await this.redisService.unLock(key)
+    }
+
+  }
+
+  async mergeToken(){
+    const key = this.redisService.combineKeyWithPrefix(RedisKeys.MERGE_TOKEN_LOCK)
+    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
+      this.logger.warn("merge token: cannot get distributed lock");
+    });
+    if (!isLocked) {
+      return
+    }
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const sql = 'SELECT ' +
+        'string_agg(a.id::TEXT, \',\') AS ids,' +
+        'a.user_adr,' +
+        'COUNT(*) AS total ' +
+        'FROM (SELECT * FROM pf_create WHERE status = 0 LIMIT 500) AS a ' +
+        'GROUP BY a.user_adr';
+      const results = await queryRunner.manager.query(sql);
+      this.logger.log(`merge token find: ${results?.length??0}`);
+      if (results && results.length > 0) {
+        const map = new Map();
+        const adrArr = [];
+        let ids = '';
+        results.forEach(e => {
+          map.set(e.user_adr, e);
+          adrArr.push(e.user_adr);
+          ids += ',' + e.ids;
+        });
+
+        const oldTokens = await this.userTokenRepository.find({ where: { userAdr: In(adrArr) } });
+        if (oldTokens && oldTokens.length > 0) {
+          const updateTime = new Date()
+          for (const token of oldTokens) {
+            const existsToken = map.get(token.userAdr);
+            map.delete(token.userAdr);
+            await queryRunner.manager.update(
+              UserToken,
+              { userAdr: token.userAdr},
+              { amount: token.amount + Number(existsToken.total),
+                updateTime: updateTime
+              }
+            );
+          }
+        }
+
+        const newTokens = [];
+        if (map.size > 0) {
+          for (const item of map.values()) {
+            const token = new UserToken();
+            token.userAdr = item.user_adr;
+            token.amount = Number(item.total);
+            token.status = 0;
+            newTokens.push(token);
+          }
+          await queryRunner.manager.insert(UserToken, newTokens);
+        }
+
+        await queryRunner.manager.update(
+          PfCreate,
+          { id: In(ids.substring(1).split(',')) },
+          { status: 1 },
+        );
+      }
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      this.logger.error("merge token failed",  err.message);
+      // since we have errors lets rollback the changes we made
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release()
+      await this.redisService.unLock(key)
+    }
+  }
+
+  async mergePfHash(tableSeq: number) {
+    const key = this.redisService.combineKeyWithPrefix(RedisKeys.MERGE_PF_HASH_LOCK+tableSeq)
+    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
+      this.logger.warn("merge token: cannot get distributed lock");
+    });
+    if (!isLocked) {
+      return
+    }
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const sql = 'SELECT tx_id FROM pf_sig_1 ORDER BY id LIMIT 1';
+      const results = await queryRunner.manager.query(sql);
+      const beforeHash = results?.length > 0 ? results[0].tx_id : null
+
+      if(beforeHash){
+        const options = { before: beforeHash, limit: 1000}
+        const resp = await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized")
+        if(resp && resp.length > 0){
+          const lastTxHash = resp[resp.length - 1]
+        }
+      }
+      this.logger.log(`merge pf hash, tableSeq: ${tableSeq}, ${beforeHash}`);
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      this.logger.error("merge token failed",  err.message);
+      // since we have errors lets rollback the changes we made
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release()
+      await this.redisService.unLock(key)
+    }
+  }
+
+
+  async mergePfHashV2(beforeHash: string, index:number) {
+    if(index > 10){
+      return
+    }
+    const options = { before: beforeHash, limit: 1000}
+    const start = process.hrtime();
+    const resp = await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized")
+    const end = process.hrtime(start);
+    //this.logger.log(`${beforeHash} => ${end[0]+'.'+end[1]+'s'}, ${resp?.length??0}, ${index}`)
+    if(resp && resp.length > 0){
+      const lastTxHash = resp[resp.length - 1].signature
+      await this.mergePfHashV2(lastTxHash, index+1)
+    }
+  }
 
 }

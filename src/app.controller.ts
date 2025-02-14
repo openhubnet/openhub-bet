@@ -64,4 +64,22 @@ export class AppController {
     await this.scanService.saveTrade(trade)
     return respSuccess(true);
   }
+
+  @Get('/mergeTrade')
+  async mergeTrade(): Promise<Result> {
+    await this.scanService.mergeTrade()
+    return respSuccess()
+  }
+
+  @Get('/mergeTradeClip')
+  async mergeTradeClip(): Promise<Result> {
+    await this.scanService.mergeTradeClip()
+    return respSuccess()
+  }
+
+  @Get('/mergeToken')
+  async mergeToken(): Promise<Result> {
+    await this.scanService.mergeToken()
+    return respSuccess()
+  }
 }

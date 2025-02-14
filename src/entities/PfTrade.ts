@@ -10,10 +10,10 @@ export class PfTrade{
   mint: string;
 
   @Column({name: 'sol_amount'})
-  solAmount: string;
+  solAmount: number;
 
   @Column({name: 'token_amount'})
-  tokenAmount: string;
+  tokenAmount: number;
 
   @Column({ default: true , name: 'is_buy'})
   isBuy: boolean;
@@ -30,6 +30,7 @@ export class PfTrade{
   @Column({name: 'block_number'})
   blockNumber: number;
 
+  // 0:数据初始化 1:已统计
   @Column()
   status: number;
 

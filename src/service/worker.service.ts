@@ -7,7 +7,7 @@ import { ScanService } from './scan.service';
 import * as os from 'os';
 const cpuCount = os.cpus().length;
 
-@Processor(BullQueueName.SLOT_QUEUE, {concurrency: cpuCount})
+//@Processor(BullQueueName.SLOT_QUEUE, {concurrency: cpuCount})
 export class WorkerService extends WorkerHost implements OnModuleInit{
 
   private readonly logger = new Logger(WorkerService.name);

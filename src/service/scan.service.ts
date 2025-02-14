@@ -740,7 +740,7 @@ export class ScanService{
     const start = process.hrtime();
     const resp = await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized")
     const end = process.hrtime(start);
-    //this.logger.log(`${beforeHash} => ${end[0]+'.'+end[1]+'s'}, ${resp?.length??0}, ${index}`)
+    this.logger.log(`${beforeHash} => ${end[0]+'.'+end[1]+'s'}, ${resp?.length??0}, ${index}`)
     if(resp && resp.length > 0){
       const lastTxHash = resp[resp.length - 1].signature
       await this.mergePfHashV2(lastTxHash, index+1)

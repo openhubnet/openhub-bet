@@ -6,7 +6,7 @@ export enum RedisKeys {
     MERGE_TRADE_LOCK = 'merge_trade_lock',
     MERGE_TRADE_CLIP_LOCK = 'merge_trade_clip_lock',
     MERGE_TOKEN_LOCK = 'merge_token_lock',
-    MERGE_PF_HASH_LOCK = 'merge_pf_hash_lock_',
+    MERGE_PF_HASH_LOCK = 'merge_pf_hash_lock',
 
 
 }
@@ -34,11 +34,13 @@ export enum BullQueueName{
     PREFIX = "BULL",
     JOB_ID = "jobId",
     LOG_JOB_ID = "logJobId",
+    PF_HASH_JOB_ID = "pfHashJobId",
 }
 
 export enum BullTaskName{
     SLOT_TASK = "SLOT_TASK",
-    LOG_SUBSCRIBE_TASK = "LOG_SUBSCRIBE_TASK"
+    LOG_SUBSCRIBE_TASK = "LOG_SUBSCRIBE_TASK",
+    PF_HASH_TASK = "PF_HASH_TASK"
 }
 
 export enum ExchangeName{

@@ -18,6 +18,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { HttpModule } from '@nestjs/axios';
 import { UserTrade } from './entities/UserTrade';
 import { UserToken } from './entities/UserToken';
+import { PfTxId } from './entities/PfTxId';
+import { PfTxConf } from './entities/PfTxConf';
 const env = process.env.NODE_ENV || 'development'; // 默认加载 development 环境
 
 @Module({
@@ -26,7 +28,7 @@ const env = process.env.NODE_ENV || 'development'; // 默认加载 development �
     ConfigModule.forRoot({
       envFilePath: ['.env', `.env.${env}`],
     }),
-    TypeOrmModule.forFeature([PfTrade, PfCreate, SolanaSlot, UserTrade, UserToken]),
+    TypeOrmModule.forFeature([PfTrade, PfCreate, SolanaSlot, UserTrade, UserToken, PfTxId, PfTxConf]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

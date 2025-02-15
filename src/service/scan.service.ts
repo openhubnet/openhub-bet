@@ -8,7 +8,7 @@ import {
   PF_LOG_TRADE_DATA_ENCODED_PREFIX,
   PF_LOG_TRADE_DATA_ENCODED_PREFIX_OFFSET,
   PF_LOG_TRADE_TOTAL_LENGTH,
-  PF_PROGRAM_ID,
+  PF_PROGRAM_ID, PfHashTaskData,
   PfTradeEventLayout,
 } from '../dto/common.dto';
 import Utils from '../utils';
@@ -28,6 +28,8 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { UserTrade } from '../entities/UserTrade';
 import { UserToken } from 'src/entities/UserToken';
+import { PfTxConf } from '../entities/PfTxConf';
+import { PfTxId } from '../entities/PfTxId';
 
 @Injectable()
 export class ScanService{
@@ -48,14 +50,16 @@ export class ScanService{
     private configService: ConfigService,
     @InjectRepository(SolanaSlot)
     private readonly slotRepository: Repository<SolanaSlot>,
-    @InjectRepository(PfCreate)
-    private readonly pfCreateRepository: Repository<PfCreate>,
-    @InjectRepository(PfTrade)
-    private readonly pfTradeRepository: Repository<PfTrade>,
-    @InjectRepository(UserTrade)
-    private readonly userTradeRepository: Repository<UserTrade>,
-    @InjectRepository(UserToken)
-    private readonly userTokenRepository: Repository<UserToken>,
+    //@InjectRepository(PfCreate)
+    //private readonly pfCreateRepository: Repository<PfCreate>,
+    //@InjectRepository(PfTrade)
+    //private readonly pfTradeRepository: Repository<PfTrade>,
+    //@InjectRepository(UserTrade)
+    //private readonly userTradeRepository: Repository<UserTrade>,
+    //@InjectRepository(UserToken)
+    //private readonly userTokenRepository: Repository<UserToken>,
+    @InjectRepository(PfTxConf)
+    private readonly pfTxConfRepository: Repository<PfTxConf>,
     private readonly httpService: HttpService
   ) {
     this.provider = new Connection(this.configService.get("SOLANA_URL"), {commitment:"confirmed", wsEndpoint: this.configService.get("SOLANA_WSS")})
@@ -467,6 +471,11 @@ export class ScanService{
   }
 
   listenerLog(){
+    const enable = this.configService.get('ENABLE_LISTENER_LOG')
+    if(enable != 'true'){
+      this.logger.warn('init listener log task not enabled')
+      return
+    }
     this.listenerLogSubscriptionId = this.provider.onLogs(PF_PROGRAM_ID, (txLogs: Logs, ctx: Context) => {
       if ((!ctx || !txLogs || txLogs.err !== null || !txLogs.logs || txLogs.logs.length < 3)
         || (!txLogs.signature || txLogs.signature === OPAQUE_SIGNATURE)) {
@@ -484,15 +493,40 @@ export class ScanService{
     await this.provider.removeOnLogsListener(this.listenerLogSubscriptionId)
   }
 
-  async mergeTrade(){
-    const key = this.redisService.combineKeyWithPrefix(RedisKeys.MERGE_TRADE_LOCK)
-    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
-      this.logger.warn("merge trade: cannot get distributed lock");
-    });
-    if (!isLocked) {
-      this.logger.warn("merge trade: cannot get distributed lock");
+  async initMergeTrade(){
+    const enable = this.configService.get('ENABLE_MERGE_TRADE_TASK')
+    if(enable != 'true'){
+      this.logger.warn('init merge trade task not enabled')
       return
     }
+    this.recursionMergeTrade()
+    this.recursionMergeTradeClip()
+    this.recursionMergeToken()
+  }
+  async recursionMergeTrade(){
+    await this.mergeTrade().finally(()=>{
+      Utils.sleep(2000).finally(()=>{
+       this.recursionMergeTrade()
+      })
+    })
+  }
+
+  async recursionMergeTradeClip(){
+    await this.mergeTradeClip().finally(()=>{
+      Utils.sleep(5000).finally(()=>{
+        this.recursionMergeTrade()
+      })
+    })
+  }
+
+  async recursionMergeToken(){
+    await this.mergeToken().finally(()=>{
+      Utils.sleep(5000).finally(()=>{
+        this.recursionMergeTrade()
+      })
+    })
+  }
+  async mergeTrade(){
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
@@ -502,10 +536,16 @@ export class ScanService{
         'a.user_adr,' +
         'SUM(a.sol_amount) AS total_sol_amounts,' +
         'SUM(a.token_amount) AS total_token_amounts ' +
-        'FROM (SELECT * FROM pf_trade WHERE status = 0 LIMIT 500) AS a ' +
+        'FROM (SELECT * FROM pf_trade WHERE status = 0 ORDER BY id LIMIT 500) AS a ' +
         'GROUP BY a.user_adr';
+      const start = process.hrtime();
+      let foundPfTradeSize = 0
+      let insertUserTradeSize = 0
+      let updateUserTradeSize = 0
+      let updatePfTradeSize = 0
       const results = await queryRunner.manager.query(sql);
-      this.logger.log(`merge trade find: ${results?.length??0}`);
+      foundPfTradeSize = results?.length??0
+      this.logger.log(`merge trade find: ${foundPfTradeSize}`);
       if (results && results.length > 0) {
         const map = new Map();
         const adrArr = [];
@@ -516,7 +556,9 @@ export class ScanService{
           ids += ',' + e.ids;
         });
         const updateTime = new Date()
-        const oldTrades = await this.userTradeRepository.find({ where: { userAdr: In(adrArr) } });
+        //const oldTrades = await this.userTradeRepository.find({ where: { userAdr: In(adrArr) } });
+        const oldTrades = await queryRunner.manager.find(UserTrade, { where: { userAdr: In(adrArr) }})
+
         if (oldTrades && oldTrades.length > 0) {
           for (const trade of oldTrades) {
             const existsTrade = map.get(trade.userAdr);
@@ -534,6 +576,7 @@ export class ScanService{
               }
             );
           }
+          updateUserTradeSize = oldTrades.length
         }
 
         const newTrades = [];
@@ -548,35 +591,32 @@ export class ScanService{
             newTrades.push(trade);
           }
           await queryRunner.manager.insert(UserTrade, newTrades);
+          insertUserTradeSize = newTrades.length;
         }
 
+        const idArr = ids.substring(1).split(',')
+        updatePfTradeSize = idArr.length;
         await queryRunner.manager.update(
           PfTrade,
-          { id: In(ids.substring(1).split(',')) },
+          { id: In(idArr) },
           { status: 1,updateTime: updateTime },
         );
       }
       await queryRunner.commitTransaction();
+      const end = process.hrtime(start);
+      this.logger.log(`merge trade: cost ${end[0] + '.' + end[1] + 's'}, found:${foundPfTradeSize},insert:${insertUserTradeSize},update:${updateUserTradeSize},updatePfTrade:${updatePfTradeSize}`);
     } catch (err) {
       this.logger.error("merge trade failed",  err.message);
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction();
     } finally {
       await queryRunner.release()
-      await this.redisService.unLock(key)
     }
 
   }
 
 
   async mergeTradeClip(){
-    const key = this.redisService.combineKeyWithPrefix(RedisKeys.MERGE_TRADE_CLIP_LOCK)
-    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
-      this.logger.warn("merge trade clip: cannot get distributed lock");
-    });
-    if (!isLocked) {
-      return
-    }
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
@@ -584,11 +624,16 @@ export class ScanService{
       const sql = 'SELECT \n' +
         'a.block_number,\n' +
         'a.user_adr\n' +
-        'FROM (SELECT block_number,tx_id,user_adr FROM pf_trade WHERE block_number IN (SELECT DISTINCT block_number FROM pf_trade WHERE status = 1 LIMIT 1000)) AS a\n' +
+        'FROM (SELECT block_number,tx_id,user_adr FROM pf_trade WHERE block_number IN (SELECT DISTINCT block_number FROM pf_trade WHERE status = 1 AND update_time < NOW() - INTERVAL \'5 minutes\' LIMIT 1000)) AS a\n' +
         'GROUP BY a.block_number,a.tx_id,a.user_adr\n' +
         'HAVING COUNT(a.user_adr) > 1';
+      const start = process.hrtime();
+      let foundSize = 0
+      let updatePfTradeSize = 0
+      let updateUserTradeSize = 0
       const results = await queryRunner.manager.query(sql);
-      this.logger.log(`merge trade clip find: ${results?.length??0}`);
+      foundSize = results?.length??0
+      this.logger.log(`merge trade clip find: ${foundSize}`);
       if (results && results.length > 0) {
         const blockArr = [];
         const adrArr = [];
@@ -602,33 +647,28 @@ export class ScanService{
           { blockNumber: In(blockArr) },
           { status: 2, updateTime: updateTime },
         )
+        updatePfTradeSize = blockArr.length;
 
         await queryRunner.manager.update(
           UserTrade,
           { userAdr: In(adrArr) },
           { type: 1, updateTime: updateTime },
         )
+        updateUserTradeSize = adrArr.length;
       }
       await queryRunner.commitTransaction();
+      const end = process.hrtime(start);
+      this.logger.log(`merge trade clip: cost ${end[0] + '.' + end[1] + 's'}, found:${foundSize},update:${updateUserTradeSize},updatePfTrade:${updatePfTradeSize}`);
     } catch (err) {
       this.logger.error("merge trade clip failed", err.message);
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction();
     } finally {
       await queryRunner.release()
-      await this.redisService.unLock(key)
     }
-
   }
 
   async mergeToken(){
-    const key = this.redisService.combineKeyWithPrefix(RedisKeys.MERGE_TOKEN_LOCK)
-    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
-      this.logger.warn("merge token: cannot get distributed lock");
-    });
-    if (!isLocked) {
-      return
-    }
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
@@ -639,8 +679,14 @@ export class ScanService{
         'COUNT(*) AS total ' +
         'FROM (SELECT * FROM pf_create WHERE status = 0 LIMIT 500) AS a ' +
         'GROUP BY a.user_adr';
+      const start = process.hrtime();
+      let foundSize = 0
+      let updatePfCreateSize = 0
+      let insertUserTokenSize = 0
+      let updateUserTokenSize = 0
       const results = await queryRunner.manager.query(sql);
-      this.logger.log(`merge token find: ${results?.length??0}`);
+      foundSize = results?.length??0
+      this.logger.log(`merge token find: ${foundSize}`);
       if (results && results.length > 0) {
         const map = new Map();
         const adrArr = [];
@@ -651,7 +697,8 @@ export class ScanService{
           ids += ',' + e.ids;
         });
 
-        const oldTokens = await this.userTokenRepository.find({ where: { userAdr: In(adrArr) } });
+        //const oldTokens = await this.userTokenRepository.find({ where: { userAdr: In(adrArr) } });
+        const oldTokens = await queryRunner.manager.find(UserToken, { where: { userAdr: In(adrArr) }})
         if (oldTokens && oldTokens.length > 0) {
           const updateTime = new Date()
           for (const token of oldTokens) {
@@ -665,6 +712,7 @@ export class ScanService{
               }
             );
           }
+          updateUserTokenSize = oldTokens.length
         }
 
         const newTokens = [];
@@ -677,57 +725,134 @@ export class ScanService{
             newTokens.push(token);
           }
           await queryRunner.manager.insert(UserToken, newTokens);
+          insertUserTokenSize = newTokens.length;
         }
 
+        const idArr = ids.substring(1).split(',')
         await queryRunner.manager.update(
           PfCreate,
-          { id: In(ids.substring(1).split(',')) },
+          { id: In(idArr) },
           { status: 1 },
         );
+        updatePfCreateSize = idArr.length;
       }
       await queryRunner.commitTransaction();
+      const end = process.hrtime(start);
+      this.logger.log(`merge token: cost ${end[0] + '.' + end[1] + 's'}, found:${foundSize},insert:${insertUserTokenSize},update:${updateUserTokenSize},updatePfCreate:${updatePfCreateSize}`);
     } catch (err) {
       this.logger.error("merge token failed",  err.message);
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction();
     } finally {
       await queryRunner.release()
-      await this.redisService.unLock(key)
     }
   }
 
-  async mergePfHash(tableSeq: number) {
-    const key = this.redisService.combineKeyWithPrefix(RedisKeys.MERGE_PF_HASH_LOCK+tableSeq)
-    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
-      this.logger.warn("merge token: cannot get distributed lock");
-    });
-    if (!isLocked) {
+  async initMergePfHashTask(){
+    const enable = this.configService.get('ENABLE_MERGE_PF_HASH_TASK')
+    if(enable != 'true'){
+      this.logger.warn('init merge pf hash task not enabled')
       return
     }
+    const resp = await this.pfTxConfRepository.find({ where: { status: 0 } })
+    this.logger.log(`init merge pf hash task: ${resp?.length??0}`);
+    if(resp && resp.length > 0){
+      for (const conf of resp) {
+         this.recursionMergePfHashTask({
+           id: conf.id,
+           beforeTxId: conf.beforeTxId,
+           beforeBlockNumber: conf.beforeBlockNumber,
+           endBlockNumber: conf.endBlockNumber
+         } as PfHashTaskData)
+      }
+    }
+/*    const tasks = resp.map(conf => {
+      return this.makePfHashTask({
+        id: conf.id,
+        beforeTxId: conf.beforeTxId,
+        beforeBlockNumber: conf.beforeBlockNumber,
+        endBlockNumber: conf.endBlockNumber
+      } as PfHashTaskData);
+    })
+    await this.slotQueue.addBulk(tasks)*/
+  }
+
+  async recursionMergePfHashTask(task: PfHashTaskData){
+     const newTask = await this.dealPfHashTask(task)
+    if(newTask){
+      this.recursionMergePfHashTask(newTask)
+    }
+  }
+  async dealPfHashTask(task: PfHashTaskData):Promise<PfHashTaskData> {
     const queryRunner = this.dataSource.createQueryRunner();
+    let newTask = null
+    //let dealSuccess = false;
     try {
+      const start = process.hrtime();
       await queryRunner.connect();
       await queryRunner.startTransaction();
-      const sql = 'SELECT tx_id FROM pf_sig_1 ORDER BY id LIMIT 1';
-      const results = await queryRunner.manager.query(sql);
-      const beforeHash = results?.length > 0 ? results[0].tx_id : null
+      const options = { before: task.beforeTxId, limit: 1000}
+      const resp = await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized")
 
-      if(beforeHash){
-        const options = { before: beforeHash, limit: 1000}
-        const resp = await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized")
-        if(resp && resp.length > 0){
-          const lastTxHash = resp[resp.length - 1]
+      if(resp && resp.length > 0){
+        const pfTxArr = []
+        resp.forEach(item=>{
+          if(!item.err){
+            const pfTx = new PfTxId()
+            pfTx.txId = item.signature
+            pfTx.blockNumber = item.slot
+            pfTx.status = 0
+            pfTxArr.push(pfTx)
+          }
+        })
+        if(pfTxArr.length > 0){
+          await queryRunner.manager.insert(PfTxId,pfTxArr)
+          const lastPfTx = pfTxArr[pfTxArr.length - 1]
+          await queryRunner.manager.update(
+            PfTxConf,
+            { id: task.id},
+            { beforeTxId: lastPfTx.txId,
+              beforeBlockNumber: lastPfTx.blockNumber,
+            }
+          );
+          if(lastPfTx.blockNumber > task.endBlockNumber){
+            newTask = {
+              id: task.id,
+              beforeTxId: lastPfTx.txId,
+              beforeBlockNumber: lastPfTx.blockNumber,
+              endBlockNumber: task.endBlockNumber
+            } as PfHashTaskData
+          }
         }
       }
-      this.logger.log(`merge pf hash, tableSeq: ${tableSeq}, ${beforeHash}`);
+      const end = process.hrtime(start);
+      this.logger.log(`merge pf hash, taskId: ${task.id}, ${task.beforeTxId}, ${task.beforeBlockNumber}, ${end[0] + '.' + end[1] + 's'}`);
       await queryRunner.commitTransaction();
+      //dealSuccess = true
+      return newTask
     } catch (err) {
-      this.logger.error("merge token failed",  err.message);
+      //dealSuccess = false
+      this.logger.error(`merge pf hash failed, taskId: ${task.id}, ${task.beforeTxId}, ${task.beforeBlockNumber}`,  err.message);
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction()
+      return task
     } finally {
       await queryRunner.release()
-      await this.redisService.unLock(key)
+      //失败重试
+/*      if(!dealSuccess){
+        this.slotQueue.addBulk([this.makePfHashTask(task)])
+      }else if(dealSuccess && newTask){
+        this.slotQueue.addBulk([this.makePfHashTask(newTask)])
+      }*/
+    }
+  }
+
+  makePfHashTask(task: PfHashTaskData) {
+    //this.slotQueue.add(BullTaskName.PF_HASH_TASK, task,  {jobId: BullQueueName.PF_HASH_JOB_ID+":"+newTask.id, removeOnComplete:true, removeOnFail:true})
+    return {
+      name: BullTaskName.PF_HASH_TASK,
+      data: task,
+      opts: {jobId: BullQueueName.PF_HASH_JOB_ID+":"+task.id, removeOnComplete:true, removeOnFail:true}
     }
   }
 
@@ -738,13 +863,17 @@ export class ScanService{
     }
     const options = { before: beforeHash, limit: 1000}
     const start = process.hrtime();
-    const resp = await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized")
-    const end = process.hrtime(start);
-    this.logger.log(`${beforeHash} => ${end[0]+'.'+end[1]+'s'}, ${resp?.length??0}, ${index}`)
-    if(resp && resp.length > 0){
-      const lastTxHash = resp[resp.length - 1].signature
-      await this.mergePfHashV2(lastTxHash, index+1)
-    }
+    await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized").then(async resp => {
+      const end = process.hrtime(start);
+      this.logger.log(`${beforeHash} => ${end[0] + '.' + end[1] + 's'}, ${resp?.length ?? 0}, ${index}`)
+      if (resp && resp.length > 0) {
+        const lastTxHash = resp[resp.length - 1].signature
+        await this.mergePfHashV2(lastTxHash, index + 1)
+      }
+    }).catch(async (e) => {
+      this.logger.log(`${beforeHash} err => ${e.message}`)
+      await this.mergePfHashV2(beforeHash, index)
+    })
   }
 
 }

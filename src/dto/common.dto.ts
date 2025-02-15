@@ -195,3 +195,11 @@ export interface EventDbProcessor{
   name: string;
   processEventDb(event: any): Promise<void>;
 }
+
+
+export interface PfHashTaskData{
+  id: number;
+  beforeTxId: string;
+  beforeBlockNumber: number;
+  endBlockNumber: number;
+}

@@ -570,7 +570,7 @@ export class ScanService{
   listenerLog(){
     const enable = this.configService.get('ENABLE_LISTENER_LOG')
     if(enable != 'true'){
-      this.logger.warn('init listener log task not enabled')
+      this.logger.warn('init listener log task is disabled')
       return
     }
     this.listenerLogSubscriptionId = this.provider.onLogs(PF_PROGRAM_ID, (txLogs: Logs, ctx: Context) => {
@@ -593,7 +593,7 @@ export class ScanService{
   async initMergeTrade(){
     const enable = this.configService.get('ENABLE_MERGE_TRADE_TASK')
     if(enable != 'true'){
-      this.logger.warn('init merge trade task not enabled')
+      this.logger.warn('init merge trade task is disabled')
       return
     }
     this.recursionMergeTrade()
@@ -848,7 +848,7 @@ export class ScanService{
   async initMergePfHashTask(){
     const enable = this.configService.get('ENABLE_MERGE_PF_HASH_TASK')
     if(enable != 'true'){
-      this.logger.warn('init merge pf hash task not enabled')
+      this.logger.warn('init merge pf hash task is disabled')
       return
     }
     const resp = await this.pfTxConfRepository.find({ where: { status: 0 } })

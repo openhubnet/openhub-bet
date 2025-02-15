@@ -4,12 +4,14 @@ import { RedisService } from './redis.service';
 import { CronJob } from 'cron';
 import { Callback } from 'ioredis/built/types';
 import { ScanService } from './scan.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class TaskService implements OnModuleInit{
   private readonly logger = new Logger(TaskService.name);
 
   constructor(
+    private configService: ConfigService,
     private readonly redisService: RedisService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly scanService: ScanService
@@ -39,6 +41,11 @@ export class TaskService implements OnModuleInit{
 
   @Timeout(1000)
   sendParsePfHashTask() {
+    const enable = this.configService.get('ENABLE_PARSE_PF_HASH_TASK')
+    if(enable != 'true'){
+      this.logger.warn('init parse pf hash task is disabled')
+      return
+    }
     this.addCronJob("sendParsePfHashTask","*/5 * * * * *", ()=>this.scanService.sendParsePfHashTask())
   }
 

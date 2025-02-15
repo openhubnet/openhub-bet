@@ -102,8 +102,8 @@ export class EventParser {
                 pfc.mint = data.mint.toString()
                 pfc.bondingCurve = data.bondingCurve.toString()
                 pfc.userAdr = data.user.toString()
-                pfc.name = data.name?.replace(/\u0000/g, '')??'';
-                pfc.symbol = data.symbol?.replace(/\u0000/g, '')??'';
+                pfc.name = '' //data.name?.replace(/\u0000/g, '')??'';
+                pfc.symbol = '' //data.symbol?.replace(/\u0000/g, '')??'';
                 pfc.uri = data.uri
                 pfc.txId = txId
                 pfc.blockNumber = blockNumber

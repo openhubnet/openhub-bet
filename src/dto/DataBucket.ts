@@ -6,6 +6,8 @@ export class DataBucket{
   pfCreateList: PfCreate[];
   pfTradeList: PfTrade[];
   slotId: number;
+  pfHashRecordId: number;
+  needUpdateSlot: boolean;
   constructor(slotId:number) {
     this.pfCreateList = []
     this.pfTradeList = []

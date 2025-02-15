@@ -38,6 +38,11 @@ export class TaskService implements OnModuleInit{
   }
 
   @Timeout(1000)
+  sendParsePfHashTask() {
+    this.addCronJob("sendParsePfHashTask","*/5 * * * * *", ()=>this.scanService.sendParsePfHashTask())
+  }
+
+  @Timeout(1000)
   listenerLog() {
     this.scanService.listenerLog()
   }

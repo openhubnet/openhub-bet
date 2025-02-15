@@ -40,6 +40,7 @@ export class ScanService{
   private readonly startSlotNumber: number;
   private readonly intervalNumber: number;
   private readonly taskSize: number;
+  private readonly parsePfHashTaskSize: number;
   constructor(
     //@InjectRepository(PfTrade)
     //private readonly pfTradeRepository: Repository<PfTrade>,
@@ -60,6 +61,8 @@ export class ScanService{
     //private readonly userTokenRepository: Repository<UserToken>,
     @InjectRepository(PfTxConf)
     private readonly pfTxConfRepository: Repository<PfTxConf>,
+    @InjectRepository(PfTxId)
+    private readonly pfTxIdRepository: Repository<PfTxId>,
     private readonly httpService: HttpService
   ) {
     this.provider = new Connection(this.configService.get("SOLANA_URL"), {commitment:"confirmed", wsEndpoint: this.configService.get("SOLANA_WSS")})
@@ -67,6 +70,7 @@ export class ScanService{
     this.startSlotNumber = Number(this.configService.get('SCAN_BLOCK_START'));
     this.intervalNumber = Number(this.configService.get('SCAN_BLOCK_INTERVAL'));
     this.taskSize = Number(this.configService.get('SCAN_BLOCK_TASK_SIZE'));
+    this.parsePfHashTaskSize = Number(this.configService.get('PARSE_PF_HASH_TASK_SIZE'));
   }
 
   async refreshBlockNumber(){
@@ -166,6 +170,7 @@ export class ScanService{
     //console.log("resp",resp.data.id)
     this.logger.log(`Parse block: slot:${slot},blockTime:${resp.blockTime},txSize:${resp.transactions.length}`)
     const bucket = new DataBucket(slot);
+    bucket.needUpdateSlot = true;
     for (let i = 0; i < resp.transactions.length; i++) {
       const tx = resp.transactions[i]
       if(!tx.meta.err && tx.meta.logMessages){
@@ -387,6 +392,66 @@ export class ScanService{
     return this.redisService.countKeysWithPattern(pattern)
   }
 
+  async getParsePfHashJobsCount():Promise<number>{
+    const pattern = BullQueueName.PREFIX+":"+BullQueueName.SLOT_QUEUE+":"+BullQueueName.PARSE_PF_HASH_JOB_ID+":*"
+    return this.redisService.countKeysWithPattern(pattern)
+  }
+
+  async getParsePfHash(): Promise<PfTxId[]> {
+    return await this.pfTxIdRepository.find({
+      where: { status: 0 }, //未处理的
+      order: { id: 'ASC' }, //先处理最旧的
+      take: this.parsePfHashTaskSize
+    })
+  }
+
+  async sendParsePfHashTask(){
+    const jobCount = await this.getParsePfHashJobsCount();
+    if(jobCount > 10){
+      return
+    }
+    const pfHashes = await this.getParsePfHash();
+    if(pfHashes && pfHashes.length > 0){
+      const tasks = pfHashes.map(item => {
+        return {
+          name: BullTaskName.PARSE_PF_HASH_TASK,
+          data: item,
+          opts: {jobId: BullQueueName.PARSE_PF_HASH_JOB_ID+":"+item.id, removeOnComplete:true, removeOnFail: {age:3600, count:5000}, attempts: 30, backoff: {type: 'exponential', delay: 10000}}};
+      })
+      await this.slotQueue.addBulk(tasks)
+    }
+  }
+
+  async dealParsePfHashTask(data: PfTxId){
+    const key = this.redisService.combineKeyWithPrefix(RedisKeys.PARSE_PF_HASH_LOCK+data.txId)
+    const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
+      this.logger.warn("parse pf hash task: cannot get distributed lock");
+    });
+    if (!isLocked) {
+      return
+    }
+    try {
+      const start = process.hrtime();
+      const resp = await this.provider.getParsedTransaction(data.txId, { maxSupportedTransactionVersion: 0 });
+      const bucket = new DataBucket(data.blockNumber);
+      bucket.pfHashRecordId = data.id;
+      if (!resp.meta.err && resp.meta.logMessages) {
+        this.eventParser.dealLogs(resp.meta.logMessages, data.txId, data.blockNumber, bucket);
+        await this.saveDataBucket(bucket).catch((err) => {
+          if (err?.message?.includes('duplicate key')) {
+            this.updatePfHashRecordStatus(bucket.pfHashRecordId);
+          } else {
+            return Promise.reject(err);
+          }
+        });
+      }
+      const end = process.hrtime(start);
+      this.logger.log(`parse pf hash task, id:${data.id},block:${data.blockNumber},cost:${end[0] + '.' + end[1] + 's'},`);
+    } catch (e) {
+      this.redisService.unLock(key)
+      throw e
+    }
+  }
 
   async saveDataBucket(bucket:DataBucket) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -399,13 +464,19 @@ export class ScanService{
       if(bucket.pfCreateList.length > 0){
         await queryRunner.manager.insert(PfCreate, bucket.pfCreateList)
       }
-      await queryRunner.manager.update(SolanaSlot, {id: bucket.slotId }, { status: 1 });
+      if(bucket.pfHashRecordId){
+        await queryRunner.manager.update(PfTxId, {id: bucket.pfHashRecordId }, { status: 1 });
+      }
+      if(bucket.needUpdateSlot){
+        await queryRunner.manager.update(SolanaSlot, {id: bucket.slotId }, { status: 1 });
+      }
       await queryRunner.commitTransaction();
-      this.logger.log(`save data bucket: slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
+      this.logger.log(`save data bucket: pfHashRecordId:${bucket.pfHashRecordId},slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
     } catch (err) {
       this.logger.error(err.message)
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction();
+      //抛向外层处理
       throw err
     } finally {
       // you need to release a queryRunner which was manually instantiated
@@ -414,17 +485,42 @@ export class ScanService{
   }
 
 
+  async updatePfHashRecordStatus(pfHashRecordId:number) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+        await queryRunner.manager.update(PfTxId, {id: pfHashRecordId }, { status: 1 });
+        await queryRunner.commitTransaction();
+      this.logger.log(`pf trade exists,only update pfHashRecord:${pfHashRecordId}`)
+    } catch (err) {
+      this.logger.error(err.message)
+      // since we have errors lets rollback the changes we made
+      await queryRunner.rollbackTransaction();
+    } finally {
+      // you need to release a queryRunner which was manually instantiated
+      await queryRunner.release();
+    }
+  }
+
+
   async saveDataBucketWithDistributedLock(bucket:DataBucket, lockSuffix:string) {
-    const key = this.redisService.combineKeyWithPrefix(RedisKeys.INSERT_DATA_BUCKET_LOCK+lockSuffix)
+/*    const key = this.redisService.combineKeyWithPrefix(RedisKeys.INSERT_DATA_BUCKET_LOCK+lockSuffix)
     const isLocked = await this.redisService.lockOnce(key, 10 * 1000).catch(e => {
       this.logger.warn("save DataBucket: cannot get distributed lock");
     });
     if (!isLocked) {
       return
     }
-    try {
-      await this.saveDataBucket(bucket)
-    } catch (err: any) {
+    try {*/
+      await this.saveDataBucket(bucket).catch((err)=>{
+        if(err?.message?.includes("duplicate key")){
+          //nothing todo
+        }else{
+          return Promise.reject(err);
+        }
+      })
+/*    } catch (err: any) {
       //重复插入忽略
       if(err?.message?.includes("duplicate key")){
         //nothing todo
@@ -432,7 +528,7 @@ export class ScanService{
         this.redisService.unLock(key)
         throw err
       }
-    }
+    }*/
   }
 
   async saveTrade(trade: PfTrade) {
@@ -484,7 +580,7 @@ export class ScanService{
       }
       const bucket = new DataBucket(ctx.slot);
       this.eventParser.dealLogs(txLogs.logs, txLogs.signature, ctx.slot, bucket)
-      this.slotQueue.add(BullTaskName.LOG_SUBSCRIBE_TASK, bucket, {jobId: BullQueueName.LOG_JOB_ID+":"+txLogs.signature, removeOnComplete:true, removeOnFail:false})
+      this.slotQueue.add(BullTaskName.LOG_SUBSCRIBE_TASK, bucket, {jobId: BullQueueName.LOG_JOB_ID+":"+txLogs.signature, removeOnComplete:true,  removeOnFail: {age:3600, count:5000}, attempts: 30, backoff: {type: 'exponential', delay: 10000}})
     });
 
     return this.listenerLogSubscriptionId
@@ -790,12 +886,11 @@ export class ScanService{
     //let dealSuccess = false;
     try {
       const start = process.hrtime();
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
       const options = { before: task.beforeTxId, limit: 1000}
       const resp = await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized")
-
       if(resp && resp.length > 0){
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
         const pfTxArr = []
         resp.forEach(item=>{
           if(!item.err){
@@ -825,14 +920,12 @@ export class ScanService{
             } as PfHashTaskData
           }
         }
+        await queryRunner.commitTransaction();
       }
       const end = process.hrtime(start);
       this.logger.log(`merge pf hash, taskId: ${task.id}, ${task.beforeTxId}, ${task.beforeBlockNumber}, ${end[0] + '.' + end[1] + 's'}`);
-      await queryRunner.commitTransaction();
-      //dealSuccess = true
       return newTask
     } catch (err) {
-      //dealSuccess = false
       this.logger.error(`merge pf hash failed, taskId: ${task.id}, ${task.beforeTxId}, ${task.beforeBlockNumber}`,  err.message);
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction()
@@ -847,6 +940,8 @@ export class ScanService{
       }*/
     }
   }
+
+
 
   makePfHashTask(task: PfHashTaskData) {
     //this.slotQueue.add(BullTaskName.PF_HASH_TASK, task,  {jobId: BullQueueName.PF_HASH_JOB_ID+":"+newTask.id, removeOnComplete:true, removeOnFail:true})

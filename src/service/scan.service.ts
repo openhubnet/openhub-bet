@@ -35,6 +35,7 @@ import { PfTxId } from '../entities/PfTxId';
 export class ScanService{
   private readonly logger = new Logger(ScanService.name);
   private provider: Connection;
+  private providerV2: Connection;
   private eventParser: EventParser;
   private listenerLogSubscriptionId: number = 0;
   private readonly startSlotNumber: number;
@@ -66,6 +67,7 @@ export class ScanService{
     private readonly httpService: HttpService
   ) {
     this.provider = new Connection(this.configService.get("SOLANA_URL"), {commitment:"confirmed", wsEndpoint: this.configService.get("SOLANA_WSS")})
+    this.providerV2 = new Connection(this.configService.get("SOLANA_URL2"), {commitment:"confirmed", wsEndpoint: this.configService.get("SOLANA_WSS2")})
     this.eventParser = new EventParser()
     this.startSlotNumber = Number(this.configService.get('SCAN_BLOCK_START'));
     this.intervalNumber = Number(this.configService.get('SCAN_BLOCK_INTERVAL'));
@@ -432,7 +434,7 @@ export class ScanService{
     }
     try {
       const start = process.hrtime();
-      const resp = await this.provider.getParsedTransaction(data.txId, { maxSupportedTransactionVersion: 0 });
+      const resp = await this.providerV2.getParsedTransaction(data.txId, { maxSupportedTransactionVersion: 0 });
       const bucket = new DataBucket(data.blockNumber);
       bucket.pfHashRecordId = data.id;
       if (!resp.meta.err && resp.meta.logMessages) {

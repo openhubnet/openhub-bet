@@ -473,7 +473,7 @@ export class ScanService{
         await queryRunner.manager.update(SolanaSlot, {id: bucket.slotId }, { status: 1 });
       }
       await queryRunner.commitTransaction();
-      this.logger.log(`save data bucket: pfHashRecordId:${bucket.pfHashRecordId},slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
+      //this.logger.log(`save data bucket: pfHashRecordId:${bucket.pfHashRecordId},slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
     } catch (err) {
       this.logger.error(err.message)
       // since we have errors lets rollback the changes we made

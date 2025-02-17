@@ -494,6 +494,9 @@ export class ScanService{
       }
       await queryRunner.commitTransaction();
       //this.logger.log(`save data bucket: pfHashRecordId:${bucket.pfHashRecordId},slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
+      if(!bucket.pfHashRecordId){
+        this.logger.log(`listener log save => slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
+      }
     } catch (err) {
       this.logger.error(`slotId:${bucket.slotId},pfHashRecordId:${bucket.pfHashRecordId??0},txId:${txId}`+ err.message)
       // since we have errors lets rollback the changes we made
@@ -596,6 +599,7 @@ export class ScanService{
       const bucket = new DataBucket(ctx.slot);
       this.eventParser.dealLogs(txLogs.logs, txLogs.signature, ctx.slot, bucket)
       this.slotQueue.add(BullTaskName.LOG_SUBSCRIBE_TASK, bucket, {jobId: BullQueueName.LOG_JOB_ID+":"+txLogs.signature, removeOnComplete:true,  removeOnFail: {age:3600, count:5000}, attempts: 30, backoff: {type: 'exponential', delay: 10000}})
+      this.logger.log(`listener log send => slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
     });
 
     return this.listenerLogSubscriptionId

@@ -334,7 +334,7 @@ export class ScanService{
     return await queryRunner.manager.find(PfTrade, {
       where: { id: MoreThanOrEqual(6) },
     }).finally(()=>{
-      queryRunner.release()
+      queryRunner.release().catch(()=>{})
     })
   }
 
@@ -349,7 +349,7 @@ export class ScanService{
       order: { id: 'DESC' },  // 按 id 降序排列
       take: 1,                // 限制返回 1 条记录
     }).finally(()=>{
-      queryRunner.release()
+      queryRunner.release().catch(()=>{})
     });*/
     return latestSlots[0]
   }
@@ -366,7 +366,7 @@ export class ScanService{
       order: { id: 'ASC' }, //先处理最旧的
       take: this.taskSize
     }).finally(()=>{
-      queryRunner.release()
+      queryRunner.release().catch(()=>{})
     })*/
   }
 
@@ -475,12 +475,12 @@ export class ScanService{
     } catch (err) {
       this.logger.error(err.message)
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction().catch(()=>{});
       //抛向外层处理
       throw err
     } finally {
       // you need to release a queryRunner which was manually instantiated
-      await queryRunner.release();
+      await queryRunner.release().catch(()=>{});
     }
   }
 
@@ -496,10 +496,10 @@ export class ScanService{
     } catch (err) {
       this.logger.error(err.message)
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction().catch(()=>{});
     } finally {
       // you need to release a queryRunner which was manually instantiated
-      await queryRunner.release();
+      await queryRunner.release().catch(()=>{});
     }
   }
 
@@ -541,11 +541,11 @@ export class ScanService{
     } catch (err) {
       console.error(err);
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction().catch(()=>{});
       throw err
     } finally {
       // you need to release a queryRunner which was manually instantiated
-      await queryRunner.release();
+      await queryRunner.release().catch(()=>{});
     }
   }
 
@@ -559,11 +559,11 @@ export class ScanService{
     } catch (err) {
       console.error("insert batch slot failed", err.message);
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction().catch(()=>{});
       throw err
     } finally {
       // you need to release a queryRunner which was manually instantiated
-      await queryRunner.release();
+      await queryRunner.release().catch(()=>{});
     }
   }
 
@@ -705,9 +705,9 @@ export class ScanService{
     } catch (err) {
       this.logger.error("merge trade failed",  err.message);
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction().catch(()=>{});
     } finally {
-      await queryRunner.release()
+      await queryRunner.release().catch(()=>{})
     }
 
   }
@@ -759,9 +759,9 @@ export class ScanService{
     } catch (err) {
       this.logger.error("merge trade clip failed", err.message);
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction().catch(()=>{});
     } finally {
-      await queryRunner.release()
+      await queryRunner.release().catch(()=>{})
     }
   }
 
@@ -839,9 +839,9 @@ export class ScanService{
     } catch (err) {
       this.logger.error("merge token failed",  err.message);
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction().catch(()=>{});
     } finally {
-      await queryRunner.release()
+      await queryRunner.release().catch(()=>{})
     }
   }
 
@@ -906,7 +906,7 @@ export class ScanService{
             const pfTx = new PfTxId()
             pfTx.txId = item.signature
             pfTx.blockNumber = item.slot
-            pfTx.status = !item.err ? 0 : 1
+            pfTx.status = !item.err ? 0 : 2
             pfTxArr.push(pfTx)
           //}
         })
@@ -937,10 +937,10 @@ export class ScanService{
     } catch (err) {
       this.logger.error(`merge pf hash failed, taskId: ${task.id}, ${task.beforeTxId}, ${task.beforeBlockNumber}`,  err.message);
       // since we have errors lets rollback the changes we made
-      await queryRunner.rollbackTransaction()
+      await queryRunner.rollbackTransaction().catch(()=>{})
       return task
     } finally {
-      await queryRunner.release()
+      await queryRunner.release().catch(()=>{})
       //失败重试
 /*      if(!dealSuccess){
         this.slotQueue.addBulk([this.makePfHashTask(task)])

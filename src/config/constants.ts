@@ -8,6 +8,7 @@ export enum RedisKeys {
     MERGE_TOKEN_LOCK = 'merge_token_lock',
     MERGE_PF_HASH_LOCK = 'merge_pf_hash_lock',
     PARSE_PF_HASH_LOCK = 'parse_pf_hash_lock:',
+    SEND_PARSE_PF_HASH_TASK_LOCK = 'send_parse_pf_hash_task_lock',
 
 
 }

@@ -408,19 +408,37 @@ export class ScanService{
   }
 
   async sendParsePfHashTask(){
-    const jobCount = await this.getParsePfHashJobsCount();
-    if(jobCount > 10){
+    const key = this.redisService.combineKeyWithPrefix(RedisKeys.SEND_PARSE_PF_HASH_TASK_LOCK)
+    const isLocked = await this.redisService.lockOnce(key, 180 * 1000).catch(e => {
+      this.logger.warn("send parse pf hash task: cannot get distributed lock");
+    });
+    if (!isLocked) {
       return
     }
-    const pfHashes = await this.getParsePfHash();
-    if(pfHashes && pfHashes.length > 0){
-      const tasks = pfHashes.map(item => {
-        return {
-          name: BullTaskName.PARSE_PF_HASH_TASK,
-          data: item,
-          opts: {jobId: BullQueueName.PARSE_PF_HASH_JOB_ID+":"+item.id, removeOnComplete:true, removeOnFail: {age:3600, count:5000}, attempts: 30, backoff: {type: 'exponential', delay: 10000}}};
-      })
-      await this.slotQueue.addBulk(tasks)
+    try {
+      const jobCount = await this.getParsePfHashJobsCount();
+      if (jobCount > 10) {
+        return;
+      }
+      const pfHashes = await this.getParsePfHash();
+      if (pfHashes && pfHashes.length > 0) {
+        const tasks = pfHashes.map(item => {
+          return {
+            name: BullTaskName.PARSE_PF_HASH_TASK,
+            data: item,
+            opts: {
+              jobId: BullQueueName.PARSE_PF_HASH_JOB_ID + ':' + item.id,
+              removeOnComplete: true,
+              removeOnFail: { age: 3600, count: 5000 },
+              attempts: 30,
+              backoff: { type: 'exponential', delay: 10000 },
+            },
+          };
+        });
+        await this.slotQueue.addBulk(tasks);
+      }
+    } finally {
+      await this.redisService.unLock(key)
     }
   }
 

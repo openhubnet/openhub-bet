@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Connection, Context, Logs, TransactionSignature } from '@solana/web3.js';
+import { Connection, Context, Logs } from '@solana/web3.js';
 import { RedisService } from './redis.service';
 import {
   OPAQUE_SIGNATURE,
@@ -851,7 +851,16 @@ export class ScanService{
       this.logger.warn('init merge pf hash task is disabled')
       return
     }
-    const resp = await this.pfTxConfRepository.find({ where: { status: 0 } })
+    //const resp = await this.pfTxConfRepository.find(
+    //  { where: { status: 0, beforeBlockNumber: MoreThan(endBlockNumber) } }
+    //)
+    const resp = await this.dataSource
+      .getRepository(PfTxConf)
+      .createQueryBuilder("conf")
+      .where("conf.status = 0 and conf.before_block_number > conf.end_block_number")
+      .orderBy("conf.id", "ASC")
+      .getMany()
+
     this.logger.log(`init merge pf hash task: ${resp?.length??0}`);
     if(resp && resp.length > 0){
       for (const conf of resp) {
@@ -893,13 +902,13 @@ export class ScanService{
         await queryRunner.startTransaction();
         const pfTxArr = []
         resp.forEach(item=>{
-          if(!item.err){
+          //if(!item.err){
             const pfTx = new PfTxId()
             pfTx.txId = item.signature
             pfTx.blockNumber = item.slot
-            pfTx.status = 0
+            pfTx.status = !item.err ? 0 : 1
             pfTxArr.push(pfTx)
-          }
+          //}
         })
         if(pfTxArr.length > 0){
           await queryRunner.manager.insert(PfTxId,pfTxArr)

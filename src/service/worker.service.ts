@@ -8,7 +8,7 @@ import * as os from 'os';
 import { PfHashTaskData } from '../dto/common.dto';
 const cpuCount = os.cpus().length;
 
-@Processor(BullQueueName.SLOT_QUEUE, {concurrency: cpuCount})
+@Processor(BullQueueName.SLOT_QUEUE, {concurrency: cpuCount * 3})
 export class WorkerService extends WorkerHost implements OnModuleInit{
 
   private readonly logger = new Logger(WorkerService.name);

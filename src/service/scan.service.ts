@@ -477,8 +477,10 @@ export class ScanService{
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+    let txId;
     try {
       if(bucket.pfTradeList.length > 0){
+        txId = bucket.pfTradeList[0].txId
         await queryRunner.manager.insert(PfTrade, bucket.pfTradeList)
       }
       if(bucket.pfCreateList.length > 0){
@@ -493,7 +495,7 @@ export class ScanService{
       await queryRunner.commitTransaction();
       //this.logger.log(`save data bucket: pfHashRecordId:${bucket.pfHashRecordId},slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
     } catch (err) {
-      this.logger.error(err.message)
+      this.logger.error(`slotId:${bucket.slotId},pfHashRecordId:${bucket.pfHashRecordId??0},txId:${txId}`+ err.message)
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction().catch(()=>{});
       //抛向外层处理
@@ -525,30 +527,23 @@ export class ScanService{
 
 
   async saveDataBucketWithDistributedLock(bucket:DataBucket, lockSuffix:string) {
-/*    const key = this.redisService.combineKeyWithPrefix(RedisKeys.INSERT_DATA_BUCKET_LOCK+lockSuffix)
-    const isLocked = await this.redisService.lockOnce(key, 10 * 1000).catch(e => {
+    const key = this.redisService.combineKeyWithPrefix(RedisKeys.INSERT_DATA_BUCKET_LOCK+lockSuffix)
+    const isLocked = await this.redisService.lockOnce(key, 120 * 1000).catch(e => {
       this.logger.warn("save DataBucket: cannot get distributed lock");
     });
     if (!isLocked) {
       return
     }
-    try {*/
-      await this.saveDataBucket(bucket).catch((err)=>{
-        if(err?.message?.includes("duplicate key")){
-          //nothing todo
-        }else{
-          return Promise.reject(err);
-        }
-      })
-/*    } catch (err: any) {
-      //重复插入忽略
-      if(err?.message?.includes("duplicate key")){
+    try {
+      await this.saveDataBucket(bucket)
+    } catch (err) {
+      if (err?.message?.includes('duplicate key')) {
         //nothing todo
       }else{
-        this.redisService.unLock(key)
+        await this.redisService.unLock(key)
         throw err
       }
-    }*/
+    }
   }
 
   async saveTrade(trade: PfTrade) {

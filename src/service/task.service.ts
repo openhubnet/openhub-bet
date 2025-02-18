@@ -46,7 +46,7 @@ export class TaskService implements OnModuleInit{
       this.logger.warn('init parse pf hash task is disabled')
       return
     }
-    this.addCronJob("sendParsePfHashTask","*/5 * * * * *", ()=>this.scanService.sendParsePfHashTask())
+    this.addCronJob("sendParsePfHashTask","*/1 * * * * *", ()=>this.scanService.sendParsePfHashTask())
   }
 
   @Timeout(1000)

@@ -5,15 +5,16 @@ import { Logger, OnModuleInit } from '@nestjs/common';
 import { OnWorkerEvent, Processor, WorkerHost} from '@nestjs/bullmq';
 import { ScanService } from './scan.service';
 import * as os from 'os';
-import { PfHashTaskData } from '../dto/common.dto';
+import { ConfigService } from '@nestjs/config';
 const cpuCount = os.cpus().length;
 
-@Processor(BullQueueName.SLOT_QUEUE, {concurrency: 100})
+@Processor(BullQueueName.SLOT_QUEUE)
 export class WorkerService extends WorkerHost implements OnModuleInit{
 
   private readonly logger = new Logger(WorkerService.name);
 
   constructor(
+    private configService: ConfigService,
     private readonly scanService: ScanService
   ){
     super();
@@ -79,15 +80,16 @@ export class WorkerService extends WorkerHost implements OnModuleInit{
 
   @OnWorkerEvent('progress')
   onProgress(job:Job, progress:any) {
-    this.logger.error(`Worker progress ${job.id}`);
+    this.logger.log(`Worker progress ${job.id}`);
   }
 
   @OnWorkerEvent('stalled')
   onStalled(jobId:string, prev:string) {
-    this.logger.error(`Worker stalled jobId:${jobId}, prev:${prev}`);
+    this.logger.log(`Worker stalled jobId:${jobId}, prev:${prev}`);
   }
 
   async onModuleInit() {
-    //
+    this.worker.concurrency = Number(this.configService.get("BULL_QUEUE_TASK_CONCURRENCY")||cpuCount)
+    this.logger.log(`Worker concurrency ${this.worker.concurrency}`);
   }
 }

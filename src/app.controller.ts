@@ -100,10 +100,4 @@ export class AppController {
     await this.scanService.recursionUserClipFromDuneTask()
     return respSuccess()
   }
-
-  @Get('/recursionPfTradeFromDuneTask')
-  async recursionPfTradeFromDuneTask(): Promise<Result> {
-    await this.scanService.recursionPfTradeFromDuneTask()
-    return respSuccess()
-  }
 }

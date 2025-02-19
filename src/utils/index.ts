@@ -17,4 +17,15 @@ export default class Utils{
     ], PF_PROGRAM_ID)[0];
   }
 
+  public static formatStr(str: string, length:number): string {
+    if(str){
+      let newStr = str.replace(/\u0000/g, '').replace(/\x00/g, '');
+      if(newStr.length > length){
+        newStr = newStr.substring(0,length);
+      }
+      return newStr;
+    }
+    return str??''
+  }
+
 }

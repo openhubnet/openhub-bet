@@ -1031,9 +1031,9 @@ export class ScanService{
           pfc.mint = item.account_mint
           pfc.bondingCurve = item.account_bondingCurve
           pfc.userAdr = item.account_user
-          pfc.name = this.formatStr(item.name)
-          pfc.symbol = this.formatStr(item.symbol)
-          pfc.uri = this.formatStr(item.uri)
+          pfc.name = Utils.formatStr(item.name,500)
+          pfc.symbol = Utils.formatStr(item.symbol,300)
+          pfc.uri = Utils.formatStr(item.uri,600)
           pfc.txId = item.call_tx_id
           pfc.blockNumber = item.call_block_slot
           pfc.status = 0
@@ -1065,11 +1065,6 @@ export class ScanService{
     }
   }
 
-  private formatStr(str: string): string {
-    if(str){
-      return str.replace(/\x00/g, '').replace(/\u0000/g, '');
-    }
-    return str??''
-  }
+
 
 }

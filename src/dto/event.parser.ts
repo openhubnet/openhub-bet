@@ -10,6 +10,7 @@ import { PfTrade } from '../entities/PfTrade';
 import { PfCreate } from '../entities/PfCreate';
 import { DataBucket } from './DataBucket';
 import { PF_LOG_PREFIX, PF_LOG_SUCCESS } from './common.dto';
+import Utils from '../utils';
 
 /**
  * @description event 转换器,负责将筛选,并交给eventDbProcessor处理
@@ -102,11 +103,9 @@ export class EventParser {
                 pfc.mint = data.mint.toString()
                 pfc.bondingCurve = data.bondingCurve.toString()
                 pfc.userAdr = data.user.toString()
-                pfc.name = data.name?.replace(/\u0000/g, '')??'';
-                pfc.symbol = data.symbol?.replace(/\u0000/g, '')??'';
-                //pfc.name = data.name
-                //pfc.symbol = data.symbol
-                pfc.uri = data.uri
+                pfc.name = Utils.formatStr(data.name,500)
+                pfc.symbol = Utils.formatStr(data.symbol,300)
+                pfc.uri = Utils.formatStr(data.uri,600)
                 pfc.txId = txId
                 pfc.blockNumber = blockNumber
                 pfc.status = 0

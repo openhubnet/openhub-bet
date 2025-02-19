@@ -14,10 +14,10 @@ export class AppController {
   //
   @Get('/health')
   async health(): Promise<Result> {
-    return respDefault()
+    return respDefault();
   }
 
-  @Get('/refreshBlockNumber')
+/*  @Get('/refreshBlockNumber')
   async refreshBlockNumber(): Promise<Result> {
     this.scanService.refreshBlockNumber()
     return respDefault()
@@ -81,7 +81,7 @@ export class AppController {
   async mergeToken(): Promise<Result> {
     await this.scanService.mergeToken()
     return respSuccess()
-  }
+  }*/
 
 /*  @Get('/recursionPfCreateFromDuneTask')
   async recursionPfCreateFromDuneTask(): Promise<Result> {
@@ -89,7 +89,7 @@ export class AppController {
     return respSuccess()
   }*/
 
-  @Get('/recursionPfTradeFromDuneTask')
+/*  @Get('/recursionPfTradeFromDuneTask')
   async recursionPfTradeFromDuneTask(): Promise<Result> {
     await this.scanService.recursionPfTradeFromDuneTask()
     return respSuccess()
@@ -99,5 +99,5 @@ export class AppController {
   async recursionUserClipFromDuneTask(): Promise<Result> {
     await this.scanService.recursionUserClipFromDuneTask()
     return respSuccess()
-  }
+  }*/
 }

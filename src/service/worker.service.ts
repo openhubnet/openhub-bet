@@ -8,7 +8,7 @@ import * as os from 'os';
 import { ConfigService } from '@nestjs/config';
 const cpuCount = os.cpus().length;
 
-@Processor(BullQueueName.SLOT_QUEUE)
+@Processor(BullQueueName.BET_QUEUE)
 export class WorkerService extends WorkerHost implements OnModuleInit{
 
   private readonly logger = new Logger(WorkerService.name);

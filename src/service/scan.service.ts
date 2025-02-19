@@ -53,7 +53,7 @@ export class ScanService{
   constructor(
     //@InjectRepository(PfTrade)
     //private readonly pfTradeRepository: Repository<PfTrade>,
-    @InjectQueue(BullQueueName.SLOT_QUEUE)
+    @InjectQueue(BullQueueName.BET_QUEUE)
     private slotQueue: Queue,
     private dataSource: DataSource,
     private readonly redisService: RedisService,
@@ -381,12 +381,12 @@ export class ScanService{
   }
 
   async getJobsCount():Promise<number>{
-    const pattern = BullQueueName.PREFIX+":"+BullQueueName.SLOT_QUEUE+":"+BullQueueName.JOB_ID+":*"
+    const pattern = BullQueueName.PREFIX+":"+BullQueueName.BET_QUEUE+":"+BullQueueName.JOB_ID+":*"
     return this.redisService.countKeysWithPattern(pattern)
   }
 
   async getParsePfHashJobsCount():Promise<number>{
-    const pattern = BullQueueName.PREFIX+":"+BullQueueName.SLOT_QUEUE+":"+BullQueueName.PARSE_PF_HASH_JOB_ID+":*"
+    const pattern = BullQueueName.PREFIX+":"+BullQueueName.BET_QUEUE+":"+BullQueueName.PARSE_PF_HASH_JOB_ID+":*"
     return this.redisService.countKeysWithPattern(pattern)
   }
 
@@ -1062,7 +1062,7 @@ export class ScanService{
 
 
 
-  async recursionPfTradeFromDuneTask(){
+/*  async recursionPfTradeFromDuneTask(){
     this.dealPfTradeFromDuneTask().then(async () => {
       //await Utils.sleep(1000)
       this.recursionPfTradeFromDuneTask()
@@ -1072,9 +1072,9 @@ export class ScanService{
         this.recursionPfTradeFromDuneTask()
       }
     })
-  }
+  }*/
 
-  async dealPfTradeFromDuneTask():Promise<number> {
+/*  async dealPfTradeFromDuneTask():Promise<number> {
     const queryRunner = this.dataSource.createQueryRunner();
     let newPageNo = 0
     //let dealSuccess = false;
@@ -1131,10 +1131,10 @@ export class ScanService{
     } finally {
       await queryRunner.release().catch(()=>{})
     }
-  }
+  }*/
 
 
-
+/*
   async recursionUserClipFromDuneTask(){
     this.dealUserClipFromDuneTask().then(async () => {
       //await Utils.sleep(1000)
@@ -1204,5 +1204,5 @@ export class ScanService{
     } finally {
       await queryRunner.release().catch(()=>{})
     }
-  }
+  }*/
 }

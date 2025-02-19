@@ -62,7 +62,7 @@ const env = process.env.NODE_ENV || 'development'; // 默认加载 development �
     }),
     BullModule.registerQueue({
       prefix: BullQueueName.PREFIX,
-      name: BullQueueName.SLOT_QUEUE,
+      name: BullQueueName.BET_QUEUE,
     }),
     ScheduleModule.forRoot()],
   providers: [AppService, RedisService, TaskService, ScanService, WorkerService, AxiosService, DynamicConfigService],

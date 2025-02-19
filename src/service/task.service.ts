@@ -43,31 +43,31 @@ export class TaskService implements OnModuleInit{
 
   @Timeout(1000)
   sendParsePfHashTask() {
-    const enable = this.configService.get('ENABLE_PARSE_PF_HASH_TASK')
+/*    const enable = this.configService.get('ENABLE_PARSE_PF_HASH_TASK')
     if(enable != 'true'){
       this.logger.warn('init parse pf hash task is disabled')
       return
     }
-    this.addCronJob("sendParsePfHashTask","*/1 * * * * *", ()=>this.scanService.sendParsePfHashTask())
+    this.addCronJob("sendParsePfHashTask","*!/1 * * * * *", ()=>this.scanService.sendParsePfHashTask())*/
   }
 
   @Timeout(1000)
   listenerLog() {
-    this.scanService.listenerLog()
+    //this.scanService.listenerLog()
   }
 
   @Timeout(1000)
   initMergeTrade() {
-    this.scanService.initMergeTrade()
+   // this.scanService.initMergeTrade()
   }
 
   @Timeout(1000)
   initMergePfHashTask(){
-    this.scanService.initMergePfHashTask()
+    //this.scanService.initMergePfHashTask()
   }
 
   @Timeout(1000)
   refreshDynamicConfig(){
-    this.addCronJob("refreshDynamicConfig","*/5 * * * * *", ()=>this.dynamicConfigService.refresh())
+   // this.addCronJob("refreshDynamicConfig","*/5 * * * * *", ()=>this.dynamicConfigService.refresh())
   }
 }

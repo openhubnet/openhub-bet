@@ -44,7 +44,7 @@ export enum QueueName{
 }
 
 export enum BullQueueName{
-    SLOT_QUEUE = "SLOT_QUEUE",
+    BET_QUEUE = "BET_QUEUE",
     PREFIX = "BULL",
     JOB_ID = "jobId",
     LOG_JOB_ID = "logJobId",

@@ -1060,4 +1060,72 @@ export class ScanService{
   }
 
 
+
+  async recursionPfTradeFromDuneTask(){
+    this.dealPfTradeFromDuneTask().then(async () => {
+      //await Utils.sleep(1000)
+      this.recursionPfTradeFromDuneTask()
+    }).catch(async () => {
+      await Utils.sleep(10000)
+      this.recursionPfTradeFromDuneTask()
+    })
+  }
+
+  async dealPfTradeFromDuneTask():Promise<number> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    let newPageNo = 0
+    //let dealSuccess = false;
+    const limit = 1000
+    let pageNo = 0
+    let offset = 0
+    try {
+      const start = process.hrtime();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const config = await queryRunner.manager.findOne(Config, { where: { key: ConfigKeys.FETCH_PUMPFUN_TRADE_LAST_PAGE, status: 0 }})
+      if(!config){
+        this.logger.error("sync dune trade, not found config")
+        return
+      }
+      pageNo = Number(config.val)+1
+      offset = (pageNo - 1) * limit
+      const resp = await this.axiosService.fetchPumpfunTrade(limit,offset)
+      // @ts-ignore
+      if(resp?.data && resp.data?.result?.rows.length > 0){
+        const utArr = []
+        // @ts-ignore
+        resp.data.result.rows.forEach(item=>{
+          const ut = new UserTrade()
+          ut.userAdr = item.user;
+          ut.solAmount = item.volume;
+          ut.tokenAmount = 0;
+          ut.type = 0;
+          ut.status = 0;
+          utArr.push(ut)
+        })
+        if(utArr.length > 0){
+          await queryRunner.manager.insert(UserTrade,utArr)
+          await queryRunner.manager.update(
+            Config,
+            { id: config.id },
+            { val: ""+pageNo,
+              lastVal: config.val,
+              updateTime: new Date() },
+          );
+        }
+        await queryRunner.commitTransaction();
+      }
+      const end = process.hrtime(start);
+      this.logger.log(`sync dune trade, pageNo:${pageNo},offset:${offset},limit:${limit},${end[0] + '.' + end[1] + 's'}`);
+      return newPageNo
+    } catch (err) {
+      console.error(err)
+      this.logger.error(`sync dune trade error, pageNo:${pageNo},offset:${offset},limit:${limit}`,err.message);
+      // since we have errors lets rollback the changes we made
+      await queryRunner.rollbackTransaction().catch(()=>{})
+      throw err
+    } finally {
+      await queryRunner.release().catch(()=>{})
+    }
+  }
 }

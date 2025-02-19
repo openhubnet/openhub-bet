@@ -18,7 +18,8 @@ export enum ConfigKeys{
     MERGE_TOKEN_LAST_ID = 'merge_token_last_id',
     FETCH_PUMPFUN_CREATE_API = 'fetch_pumpfun_create_api',
     FETCH_PUMPFUN_CREATE_LAST_PAGE = 'fetch_pumpfun_create_last_page',
-    FETCH_PUMPFUN_SELL_API = 'fetch_pumpfun_sell_api',
+    FETCH_PUMPFUN_TRADE_API = 'fetch_pumpfun_trade_api',
+    FETCH_PUMPFUN_TRADE_LAST_PAGE = 'fetch_pumpfun_trade_last_page',
     DUNE_API_TOKEN = 'dune_api_token'
 }
 

@@ -83,9 +83,21 @@ export class AppController {
     return respSuccess()
   }
 
-  @Get('/recursionPfCreateFromDuneTask')
+/*  @Get('/recursionPfCreateFromDuneTask')
   async recursionPfCreateFromDuneTask(): Promise<Result> {
     await this.scanService.recursionPfCreateFromDuneTask()
+    return respSuccess()
+  }*/
+
+  @Get('/recursionPfTradeFromDuneTask')
+  async recursionPfTradeFromDuneTask(): Promise<Result> {
+    await this.scanService.recursionPfTradeFromDuneTask()
+    return respSuccess()
+  }
+
+  @Get('/recursionUserClipFromDuneTask')
+  async recursionUserClipFromDuneTask(): Promise<Result> {
+    await this.scanService.recursionUserClipFromDuneTask()
     return respSuccess()
   }
 

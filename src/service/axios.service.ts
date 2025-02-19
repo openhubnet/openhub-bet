@@ -62,4 +62,15 @@ export class AxiosService{
     return await firstValueFrom(this.httpService.get(url, config))
   }
 
+  async fetchPumpfunUserClip(limit:number,offset:number){
+    const config = {
+      headers: {
+        'X-Dune-API-Key': this.dynamicConfigService.getConfig(ConfigKeys.DUNE_API_TOKEN).val,
+        'Content-Type': "application/json"
+      }
+    }
+    const url = this.dynamicConfigService.getConfig(ConfigKeys.FETCH_PUMPFUN_USER_CLIP_API).val+`?limit=${limit}&offset=${offset}`
+    return await firstValueFrom(this.httpService.get(url, config))
+  }
+
 }

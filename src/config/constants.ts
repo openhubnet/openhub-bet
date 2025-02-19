@@ -20,6 +20,8 @@ export enum ConfigKeys{
     FETCH_PUMPFUN_CREATE_LAST_PAGE = 'fetch_pumpfun_create_last_page',
     FETCH_PUMPFUN_TRADE_API = 'fetch_pumpfun_trade_api',
     FETCH_PUMPFUN_TRADE_LAST_PAGE = 'fetch_pumpfun_trade_last_page',
+    FETCH_PUMPFUN_USER_CLIP_API = 'fetch_pumpfun_user_clip_api',
+    FETCH_PUMPFUN_USER_CLIP_LAST_PAGE = 'fetch_pumpfun_user_clip_last_page',
     DUNE_API_TOKEN = 'dune_api_token'
 }
 

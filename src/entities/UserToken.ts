@@ -1,9 +1,9 @@
-import { Entity, Column, UpdateDateColumn, PrimaryColumn } from 'typeorm';
+import { Entity, Column, UpdateDateColumn, PrimaryColumn, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity()
 export class UserToken{
 
-  @PrimaryColumn()
+  @PrimaryGeneratedColumn()
   id: number;
 
   @Column({name: 'user_adr'})

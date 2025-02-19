@@ -33,6 +33,7 @@ import { PfTxId } from '../entities/PfTxId';
 import { Config } from '../entities/Config';
 import { AxiosService } from './axios.service';
 import { PfTradeV2 } from '../entities/PfTradeV2';
+import { UserClip } from '../entities/UserClip';
 
 @Injectable()
 export class ScanService{
@@ -1065,9 +1066,11 @@ export class ScanService{
     this.dealPfTradeFromDuneTask().then(async () => {
       //await Utils.sleep(1000)
       this.recursionPfTradeFromDuneTask()
-    }).catch(async () => {
-      await Utils.sleep(10000)
-      this.recursionPfTradeFromDuneTask()
+    }).catch(async (err) => {
+      if(err?.message !== 'nodata'){
+        await Utils.sleep(10000)
+        this.recursionPfTradeFromDuneTask()
+      }
     })
   }
 
@@ -1114,13 +1117,87 @@ export class ScanService{
           );
         }
         await queryRunner.commitTransaction();
+      }else{
+        throw new Error("nodata")
       }
       const end = process.hrtime(start);
       this.logger.log(`sync dune trade, pageNo:${pageNo},offset:${offset},limit:${limit},${end[0] + '.' + end[1] + 's'}`);
       return newPageNo
     } catch (err) {
-      console.error(err)
       this.logger.error(`sync dune trade error, pageNo:${pageNo},offset:${offset},limit:${limit}`,err.message);
+      // since we have errors lets rollback the changes we made
+      await queryRunner.rollbackTransaction().catch(()=>{})
+      throw err
+    } finally {
+      await queryRunner.release().catch(()=>{})
+    }
+  }
+
+
+
+  async recursionUserClipFromDuneTask(){
+    this.dealUserClipFromDuneTask().then(async () => {
+      //await Utils.sleep(1000)
+      this.recursionUserClipFromDuneTask()
+    }).catch(async (err) => {
+      if(err?.message !== 'nodata'){
+        await Utils.sleep(10000)
+        this.recursionUserClipFromDuneTask()
+      }
+    })
+  }
+
+  async dealUserClipFromDuneTask():Promise<number> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    let newPageNo = 0
+    //let dealSuccess = false;
+    const limit = 1000
+    let pageNo = 0
+    let offset = 0
+    try {
+      const start = process.hrtime();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const config = await queryRunner.manager.findOne(Config, { where: { key: ConfigKeys.FETCH_PUMPFUN_USER_CLIP_LAST_PAGE, status: 0 }})
+      if(!config){
+        this.logger.error("sync dune user clip, not found config")
+        return
+      }
+      pageNo = Number(config.val)+1
+      offset = (pageNo - 1) * limit
+      const resp = await this.axiosService.fetchPumpfunUserClip(limit,offset)
+      // @ts-ignore
+      if(resp?.data && resp.data?.result?.rows.length > 0){
+        const ucArr = []
+        // @ts-ignore
+        resp.data.result.rows.forEach(item=>{
+          if(item.user){
+            const uc = new UserClip()
+            uc.userAdr = item.user;
+            uc.status = 0;
+            ucArr.push(uc)
+          }
+        })
+        if(ucArr.length > 0){
+          await queryRunner.manager.insert(UserClip,ucArr)
+          await queryRunner.manager.update(
+            Config,
+            { id: config.id },
+            { val: ""+pageNo,
+              lastVal: config.val,
+              updateTime: new Date() },
+          );
+        }
+        await queryRunner.commitTransaction();
+      }else{
+        throw new Error("nodata")
+      }
+      const end = process.hrtime(start);
+      this.logger.log(`sync dune user clip, pageNo:${pageNo},offset:${offset},limit:${limit},${end[0] + '.' + end[1] + 's'}`);
+      return newPageNo
+    } catch (err) {
+      //console.error(err)
+      this.logger.error(`sync dune user clip error, pageNo:${pageNo},offset:${offset},limit:${limit}`,err.message);
       // since we have errors lets rollback the changes we made
       await queryRunner.rollbackTransaction().catch(()=>{})
       throw err

@@ -23,6 +23,7 @@ import { PfTxConf } from './entities/PfTxConf';
 import { Config } from './entities/Config';
 import { AxiosService } from './service/axios.service';
 import { DynamicConfigService } from './service/dynamic.config.service';
+import { UserClip } from './entities/UserClip';
 const env = process.env.NODE_ENV || 'development'; // 默认加载 development 环境
 
 @Module({
@@ -31,7 +32,7 @@ const env = process.env.NODE_ENV || 'development'; // 默认加载 development �
     ConfigModule.forRoot({
       envFilePath: ['.env', `.env.${env}`],
     }),
-    TypeOrmModule.forFeature([PfTrade, PfCreate, SolanaSlot, UserTrade, UserToken, PfTxId, PfTxConf, Config]),
+    TypeOrmModule.forFeature([PfTrade, PfCreate, SolanaSlot, UserTrade, UserToken, PfTxId, PfTxConf, Config, UserClip]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

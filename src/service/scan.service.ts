@@ -998,7 +998,7 @@ export class ScanService{
       //await Utils.sleep(1000)
       this.recursionPfCreateFromDuneTask()
     }).catch(async () => {
-      await Utils.sleep(1000)
+      await Utils.sleep(10000)
       this.recursionPfCreateFromDuneTask()
     })
   }
@@ -1024,23 +1024,17 @@ export class ScanService{
       const resp = await this.axiosService.fetchPumpfunCreate(limit,offset)
       // @ts-ignore
       if(resp?.data && resp.data?.result?.rows.length > 0){
-        const pfcArr = []
+        const utArr = []
         // @ts-ignore
         resp.data.result.rows.forEach(item=>{
-          const pfc = new PfCreate()
-          pfc.mint = item.account_mint
-          pfc.bondingCurve = item.account_bondingCurve
-          pfc.userAdr = item.account_user
-          pfc.name = Utils.formatStr(item.name,500)
-          pfc.symbol = Utils.formatStr(item.symbol,300)
-          pfc.uri = Utils.formatStr(item.uri,600)
-          pfc.txId = item.call_tx_id
-          pfc.blockNumber = item.call_block_slot
-          pfc.status = 0
-          pfcArr.push(pfc)
+          const ut = new UserToken()
+          ut.userAdr = item.account_user;
+          ut.amount = item.total;
+          ut.status = 0;
+          utArr.push(ut)
         })
-        if(pfcArr.length > 0){
-          await queryRunner.manager.insert(PfCreate,pfcArr)
+        if(utArr.length > 0){
+          await queryRunner.manager.insert(UserToken,utArr)
           await queryRunner.manager.update(
             Config,
             { id: config.id },
@@ -1064,7 +1058,6 @@ export class ScanService{
       await queryRunner.release().catch(()=>{})
     }
   }
-
 
 
 }

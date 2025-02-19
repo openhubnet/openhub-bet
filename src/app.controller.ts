@@ -82,4 +82,10 @@ export class AppController {
     await this.scanService.mergeToken()
     return respSuccess()
   }
+
+  @Get('/recursionPfCreateFromDuneTask')
+  async recursionPfCreateFromDuneTask(): Promise<Result> {
+    await this.scanService.recursionPfCreateFromDuneTask()
+    return respSuccess()
+  }
 }

@@ -19,7 +19,7 @@ import { DataBucket } from '../dto/DataBucket';
 import { PfCreate } from '../entities/PfCreate';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { BullQueueName, BullTaskName, RedisKeys } from '../config/constants';
+import { BullQueueName, BullTaskName, ConfigKeys, RedisKeys } from '../config/constants';
 import { ConfigService } from '@nestjs/config';
 import { SolanaSlot } from '../entities/SolanaSlot';
 import { Buffer } from 'buffer';
@@ -30,6 +30,9 @@ import { UserTrade } from '../entities/UserTrade';
 import { UserToken } from 'src/entities/UserToken';
 import { PfTxConf } from '../entities/PfTxConf';
 import { PfTxId } from '../entities/PfTxId';
+import { Config } from '../entities/Config';
+import { AxiosService } from './axios.service';
+import { PfTradeV2 } from '../entities/PfTradeV2';
 
 @Injectable()
 export class ScanService{
@@ -44,6 +47,8 @@ export class ScanService{
   private readonly parsePfHashTaskSize: number;
   private readonly showListenerLogOfRecv:boolean;
   private readonly showListenerLogOfDeal:boolean;
+  private readonly mergeTradePageSize: number;
+  private readonly mergeTokenPageSize: number;
   constructor(
     //@InjectRepository(PfTrade)
     //private readonly pfTradeRepository: Repository<PfTrade>,
@@ -66,7 +71,9 @@ export class ScanService{
     private readonly pfTxConfRepository: Repository<PfTxConf>,
     @InjectRepository(PfTxId)
     private readonly pfTxIdRepository: Repository<PfTxId>,
-    private readonly httpService: HttpService
+    @InjectRepository(Config)
+    private readonly configRepository: Repository<Config>,
+    private readonly axiosService: AxiosService
   ) {
     this.provider = new Connection(this.configService.get("SOLANA_URL"), {commitment:"confirmed", wsEndpoint: this.configService.get("SOLANA_WSS")})
     this.providerV2 = new Connection(this.configService.get("SOLANA_URL2"), {commitment:"confirmed", wsEndpoint: this.configService.get("SOLANA_WSS2")})
@@ -77,6 +84,8 @@ export class ScanService{
     this.parsePfHashTaskSize = Number(this.configService.get('PARSE_PF_HASH_TASK_SIZE'));
     this.showListenerLogOfRecv = this.configService.get('SHOW_LISTENER_LOG_OF_RECV') == 'true'
     this.showListenerLogOfDeal = this.configService.get('SHOW_LISTENER_LOG_OF_DEAL') == 'true'
+    this.mergeTradePageSize = Number(this.configService.get('MERGE_TRADE_PAGE_SIZE'));
+    this.mergeTokenPageSize = Number(this.configService.get('MERGE_TOKEN_PAGE_SIZE'));
   }
 
   async refreshBlockNumber(){
@@ -127,29 +136,6 @@ export class ScanService{
       }
     }
     return null;
-  }
-
-  async getBlock(slot:number){
-    const params = {
-      id: slot,
-      jsonrpc: "2.0",
-      method: "getBlock",
-      params: [
-        slot,
-        {
-          encoding: "json",
-          maxSupportedTransactionVersion: 0,
-          transactionDetails: "full",
-          rewards: false
-        }
-      ]
-    }
-    const config = {
-        headers: {
-          'Content-Type':"application/json"
-        }
-      }
-    return await firstValueFrom(this.httpService.post(this.configService.get("SOLANA_URL"), params, config))
   }
 
   async parseTx(txHash: string) {
@@ -602,7 +588,7 @@ export class ScanService{
       }
       const bucket = new DataBucket(ctx.slot);
       this.eventParser.dealLogs(txLogs.logs, txLogs.signature, ctx.slot, bucket)
-      this.slotQueue.add(BullTaskName.LOG_SUBSCRIBE_TASK, bucket, {jobId: BullQueueName.LOG_JOB_ID+":"+txLogs.signature, removeOnComplete:true,  removeOnFail: {age:3600, count:5000}, attempts: 30, backoff: {type: 'exponential', delay: 10000}})
+      this.slotQueue.add(BullTaskName.LOG_SUBSCRIBE_TASK, bucket, {jobId: BullQueueName.LOG_JOB_ID+":"+txLogs.signature, removeOnComplete:true,  removeOnFail: {age:2592000, count:50000}, attempts: 30, backoff: {type: 'exponential', delay: 10000}})
       if(this.showListenerLogOfRecv){
         this.logger.log(`log received => slotId:${bucket.slotId},tradeSize:${bucket.pfTradeList.length},createSize:${bucket.pfCreateList.length}`)
       }
@@ -648,17 +634,24 @@ export class ScanService{
       })
     })
   }
+
+  async refreshConfigs(){
+    await this.configRepository.find({ where: { status: 0 } });
+  }
   async mergeTrade(){
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      const config = await queryRunner.manager.findOne(Config, { where: { key: ConfigKeys.MERGE_TRADE_LAST_ID }})
+      const rangeStart = Number(config.val||0)+1
+      const rangeEnd = rangeStart + this.mergeTradePageSize
       const sql = 'SELECT ' +
         'string_agg(a.id::TEXT, \',\') AS ids,' +
         'a.user_adr,' +
         'SUM(a.sol_amount) AS total_sol_amounts,' +
         'SUM(a.token_amount) AS total_token_amounts ' +
-        'FROM (SELECT * FROM pf_trade WHERE status = 0 ORDER BY id LIMIT 500) AS a ' +
+        'FROM (SELECT * FROM pf_trade WHERE id BETWEEN '+rangeStart+' AND '+rangeEnd+' and status = 0) AS a ' +
         'GROUP BY a.user_adr';
       const start = process.hrtime();
       let foundPfTradeSize = 0
@@ -723,6 +716,14 @@ export class ScanService{
           { id: In(idArr) },
           { status: 1,updateTime: updateTime },
         );
+
+        await queryRunner.manager.update(
+          Config,
+          { id: config.id },
+          { val: ""+rangeEnd,
+            lastVal: config.val,
+            updateTime: updateTime },
+        );
       }
       await queryRunner.commitTransaction();
       const end = process.hrtime(start);
@@ -746,7 +747,8 @@ export class ScanService{
       const sql = 'SELECT \n' +
         'a.block_number,\n' +
         'a.user_adr\n' +
-        'FROM (SELECT block_number,tx_id,user_adr FROM pf_trade WHERE block_number IN (SELECT DISTINCT block_number FROM pf_trade WHERE status = 1 AND update_time < NOW() - INTERVAL \'5 minutes\' LIMIT 1000)) AS a\n' +
+        'FROM (SELECT block_number,tx_id,user_adr FROM pf_trade WHERE block_number IN ' +
+        '(SELECT DISTINCT block_number FROM pf_trade WHERE status = 1 AND update_time < NOW() - INTERVAL \'5 minutes\' LIMIT 1000)) AS a\n' +
         'GROUP BY a.block_number,a.tx_id,a.user_adr\n' +
         'HAVING COUNT(a.user_adr) > 1';
       const start = process.hrtime();
@@ -795,17 +797,24 @@ export class ScanService{
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      const config = await queryRunner.manager.findOne(Config, { where: { key: ConfigKeys.MERGE_TOKEN_LAST_ID, status: 0 }})
+      if(!config){
+        return
+      }
+      const rangeStart = Number(config.val)+1
+      const rangeEnd = rangeStart + this.mergeTokenPageSize
       const sql = 'SELECT ' +
         'string_agg(a.id::TEXT, \',\') AS ids,' +
         'a.user_adr,' +
         'COUNT(*) AS total ' +
-        'FROM (SELECT * FROM pf_create WHERE status = 0 LIMIT 500) AS a ' +
+        'FROM (SELECT * FROM pf_create WHERE id BETWEEN '+rangeStart+' AND '+rangeEnd+' and status = 0) AS a ' +
         'GROUP BY a.user_adr';
       const start = process.hrtime();
       let foundSize = 0
       let updatePfCreateSize = 0
       let insertUserTokenSize = 0
       let updateUserTokenSize = 0
+      const updateTime = new Date()
       const results = await queryRunner.manager.query(sql);
       foundSize = results?.length??0
       this.logger.log(`merge token find: ${foundSize}`);
@@ -854,7 +863,16 @@ export class ScanService{
         await queryRunner.manager.update(
           PfCreate,
           { id: In(idArr) },
-          { status: 1 },
+          { status: 1, updateTime: updateTime },
+        );
+
+        await queryRunner.manager.update(
+          Config,
+          { id: config.id },
+          { val: ""+rangeEnd,
+            lastVal: config.val,
+            updateTime: updateTime
+          },
         );
         updatePfCreateSize = idArr.length;
       }
@@ -975,35 +993,83 @@ export class ScanService{
     }
   }
 
+  async recursionPfCreateFromDuneTask(){
+    this.dealPfCreateFromDuneTask().then(async () => {
+      //await Utils.sleep(1000)
+      this.recursionPfCreateFromDuneTask()
+    }).catch(async () => {
+      await Utils.sleep(1000)
+      this.recursionPfCreateFromDuneTask()
+    })
+  }
 
-
-  makePfHashTask(task: PfHashTaskData) {
-    //this.slotQueue.add(BullTaskName.PF_HASH_TASK, task,  {jobId: BullQueueName.PF_HASH_JOB_ID+":"+newTask.id, removeOnComplete:true, removeOnFail:true})
-    return {
-      name: BullTaskName.PF_HASH_TASK,
-      data: task,
-      opts: {jobId: BullQueueName.PF_HASH_JOB_ID+":"+task.id, removeOnComplete:true, removeOnFail:true}
+  async dealPfCreateFromDuneTask():Promise<number> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    let newPageNo = 0
+    //let dealSuccess = false;
+    const limit = 1000
+    let pageNo = 0
+    let offset = 0
+    try {
+      const start = process.hrtime();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const config = await queryRunner.manager.findOne(Config, { where: { key: ConfigKeys.FETCH_PUMPFUN_CREATE_LAST_PAGE, status: 0 }})
+      if(!config){
+        this.logger.error("sync dune create, not found config")
+        return
+      }
+      pageNo = Number(config.val)+1
+      offset = (pageNo - 1) * limit
+      const resp = await this.axiosService.fetchPumpfunCreate(limit,offset)
+      // @ts-ignore
+      if(resp?.data && resp.data?.result?.rows.length > 0){
+        const pfcArr = []
+        // @ts-ignore
+        resp.data.result.rows.forEach(item=>{
+          const pfc = new PfCreate()
+          pfc.mint = item.account_mint
+          pfc.bondingCurve = item.account_bondingCurve
+          pfc.userAdr = item.account_user
+          pfc.name = this.formatStr(item.name)
+          pfc.symbol = this.formatStr(item.symbol)
+          pfc.uri = this.formatStr(item.uri)
+          pfc.txId = item.call_tx_id
+          pfc.blockNumber = item.call_block_slot
+          pfc.status = 0
+          pfcArr.push(pfc)
+        })
+        if(pfcArr.length > 0){
+          await queryRunner.manager.insert(PfCreate,pfcArr)
+          await queryRunner.manager.update(
+            Config,
+            { id: config.id },
+            { val: ""+pageNo,
+              lastVal: config.val,
+              updateTime: new Date() },
+          );
+        }
+        await queryRunner.commitTransaction();
+      }
+      const end = process.hrtime(start);
+      this.logger.log(`sync dune create, pageNo:${pageNo},offset:${offset},limit:${limit},${end[0] + '.' + end[1] + 's'}`);
+      return newPageNo
+    } catch (err) {
+      console.error(err)
+      this.logger.error(`sync dune create error, pageNo:${pageNo},offset:${offset},limit:${limit}`,err.message);
+      // since we have errors lets rollback the changes we made
+      await queryRunner.rollbackTransaction().catch(()=>{})
+      throw err
+    } finally {
+      await queryRunner.release().catch(()=>{})
     }
   }
 
-
-  async mergePfHashV2(beforeHash: string, index:number) {
-    if(index > 10){
-      return
+  private formatStr(str: string): string {
+    if(str){
+      return str.replace(/\x00/g, '').replace(/\u0000/g, '');
     }
-    const options = { before: beforeHash, limit: 1000}
-    const start = process.hrtime();
-    await this.provider.getSignaturesForAddress(PF_PROGRAM_ID, options, "finalized").then(async resp => {
-      const end = process.hrtime(start);
-      this.logger.log(`${beforeHash} => ${end[0] + '.' + end[1] + 's'}, ${resp?.length ?? 0}, ${index}`)
-      if (resp && resp.length > 0) {
-        const lastTxHash = resp[resp.length - 1].signature
-        await this.mergePfHashV2(lastTxHash, index + 1)
-      }
-    }).catch(async (e) => {
-      this.logger.log(`${beforeHash} err => ${e.message}`)
-      await this.mergePfHashV2(beforeHash, index)
-    })
+    return str??''
   }
 
 }

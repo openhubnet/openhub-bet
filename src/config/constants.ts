@@ -13,6 +13,15 @@ export enum RedisKeys {
 
 }
 
+export enum ConfigKeys{
+    MERGE_TRADE_LAST_ID = 'merge_trade_last_id',
+    MERGE_TOKEN_LAST_ID = 'merge_token_last_id',
+    FETCH_PUMPFUN_CREATE_API = 'fetch_pumpfun_create_api',
+    FETCH_PUMPFUN_CREATE_LAST_PAGE = 'fetch_pumpfun_create_last_page',
+    FETCH_PUMPFUN_SELL_API = 'fetch_pumpfun_sell_api',
+    DUNE_API_TOKEN = 'dune_api_token'
+}
+
 
 export enum StoreKeys {
     SYNC_TOKEN_GENERATED_LAST_QUERY_PARAMS = 'sync:token_generated_last_query_params',

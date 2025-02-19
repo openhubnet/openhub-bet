@@ -5,6 +5,7 @@ import { CronJob } from 'cron';
 import { Callback } from 'ioredis/built/types';
 import { ScanService } from './scan.service';
 import { ConfigService } from '@nestjs/config';
+import { DynamicConfigService } from './dynamic.config.service';
 
 @Injectable()
 export class TaskService implements OnModuleInit{
@@ -14,7 +15,8 @@ export class TaskService implements OnModuleInit{
     private configService: ConfigService,
     private readonly redisService: RedisService,
     private readonly schedulerRegistry: SchedulerRegistry,
-    private readonly scanService: ScanService
+    private readonly scanService: ScanService,
+    private readonly dynamicConfigService: DynamicConfigService,
   ) {}
 
   onModuleInit() {
@@ -62,5 +64,10 @@ export class TaskService implements OnModuleInit{
   @Timeout(1000)
   initMergePfHashTask(){
     this.scanService.initMergePfHashTask()
+  }
+
+  @Timeout(1000)
+  refreshDynamicConfig(){
+    this.addCronJob("refreshDynamicConfig","*/5 * * * * *", ()=>this.dynamicConfigService.refresh())
   }
 }

@@ -89,6 +89,7 @@ export class WorkerService extends WorkerHost implements OnModuleInit{
   }
 
   async onModuleInit() {
+    //this.worker.pause(true)
     this.worker.concurrency = Number(this.configService.get("BULL_QUEUE_TASK_CONCURRENCY")||cpuCount)
     this.logger.log(`Worker concurrency ${this.worker.concurrency}`);
   }

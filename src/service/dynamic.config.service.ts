@@ -18,7 +18,7 @@ export class DynamicConfigService implements OnModuleInit{
     resp.forEach((item) => {
         this.map.set(item.key, item);
     })
-   // this.logger.log(`refresh dynamic config, keys:${this.map.size}`);
+        // this.logger.log(`refresh dynamic config, keys:${this.map.size}`);
   }
 
   getConfig(key: string): Config{

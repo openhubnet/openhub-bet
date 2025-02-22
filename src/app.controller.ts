@@ -2,19 +2,26 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AppService } from './app.service';
 import { respDefault, respFail, respSuccess, Result } from './dto/common.dto';
 import { ScanService } from './service/scan.service';
-import { PfTrade } from './entities/PfTrade';
+import {IpfsService} from "./service/ipfs.service"
 
 @Controller()
 export class AppController {
   constructor(
     private readonly appService: AppService,
     private readonly scanService: ScanService,
+    private readonly ipfsService: IpfsService,
   ) {}
 
   //
   @Get('/health')
   async health(): Promise<Result> {
     return respDefault();
+  }
+
+  @Get('/ipfsTest')
+  async ipfsTest(@Query('file') file: string){
+    const data = await this.ipfsService.storeFile(file);
+    return respSuccess(data);
   }
 
 /*  @Get('/refreshBlockNumber')

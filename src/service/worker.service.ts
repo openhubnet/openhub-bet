@@ -20,13 +20,13 @@ export class WorkerService extends WorkerHost implements OnModuleInit{
     super();
   }
   async process(job: Job, token: string | undefined): Promise<any> {
-      if (job.name === BullTaskName.SLOT_TASK) {
+     /* if (job.name === BullTaskName.SLOT_TASK) {
         await this.scanService.parseBlock(job.data)
       }else if(job.name === BullTaskName.LOG_SUBSCRIBE_TASK){
         await this.scanService.saveDataBucketWithDistributedLock(job.data, job.id)
       }else if(job.name === BullTaskName.PARSE_PF_HASH_TASK){
         await this.scanService.dealParsePfHashTask(job.data)
-      }/*else if(job.name === BullTaskName.PF_HASH_TASK){
+      }*//*else if(job.name === BullTaskName.PF_HASH_TASK){
         await this.scanService.recursionDealPfHashTask(job.data)
       }*/
       return Promise.resolve(job.id);

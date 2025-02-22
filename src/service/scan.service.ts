@@ -12,28 +12,19 @@ import {
   PfTradeEventLayout,
 } from '../dto/common.dto';
 import Utils from '../utils';
-import { PfTrade } from '../entities/PfTrade';
 import { DataSource, In, MoreThanOrEqual, Repository } from 'typeorm';
 import { EventParser } from '../dto/event.parser';
 import { DataBucket } from '../dto/DataBucket';
-import { PfCreate } from '../entities/PfCreate';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { BullQueueName, BullTaskName, ConfigKeys, RedisKeys } from '../config/constants';
 import { ConfigService } from '@nestjs/config';
-import { SolanaSlot } from '../entities/SolanaSlot';
 import { Buffer } from 'buffer';
 import { InjectRepository } from '@nestjs/typeorm';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { UserTrade } from '../entities/UserTrade';
-import { UserToken } from 'src/entities/UserToken';
-import { PfTxConf } from '../entities/PfTxConf';
-import { PfTxId } from '../entities/PfTxId';
 import { Config } from '../entities/Config';
 import { AxiosService } from './axios.service';
-import { PfTradeV2 } from '../entities/PfTradeV2';
-import { UserClip } from '../entities/UserClip';
 
 @Injectable()
 export class ScanService{
@@ -58,8 +49,6 @@ export class ScanService{
     private dataSource: DataSource,
     private readonly redisService: RedisService,
     private configService: ConfigService,
-    @InjectRepository(SolanaSlot)
-    private readonly slotRepository: Repository<SolanaSlot>,
     //@InjectRepository(PfCreate)
     //private readonly pfCreateRepository: Repository<PfCreate>,
     //@InjectRepository(PfTrade)
@@ -68,10 +57,10 @@ export class ScanService{
     //private readonly userTradeRepository: Repository<UserTrade>,
     //@InjectRepository(UserToken)
     //private readonly userTokenRepository: Repository<UserToken>,
-    @InjectRepository(PfTxConf)
-    private readonly pfTxConfRepository: Repository<PfTxConf>,
-    @InjectRepository(PfTxId)
-    private readonly pfTxIdRepository: Repository<PfTxId>,
+    //@InjectRepository(PfTxConf)
+    //private readonly pfTxConfRepository: Repository<PfTxConf>,
+    //@InjectRepository(PfTxId)
+    //private readonly pfTxIdRepository: Repository<PfTxId>,
     @InjectRepository(Config)
     private readonly configRepository: Repository<Config>,
     private readonly axiosService: AxiosService
@@ -89,7 +78,7 @@ export class ScanService{
     this.mergeTokenPageSize = Number(this.configService.get('MERGE_TOKEN_PAGE_SIZE'));
   }
 
-  async refreshBlockNumber(){
+/*  async refreshBlockNumber(){
     try {
       let lastSlotNumber = this.startSlotNumber
       const lastSlot = await this.getLastSlot()
@@ -112,9 +101,9 @@ export class ScanService{
     } catch (e) {
       this.logger.error(e);
     }
-  }
+  }*/
 
-  parseLogs(logs: string[]): PfTradeEventLayout | null {
+/*  parseLogs(logs: string[]): PfTradeEventLayout | null {
     const logsLength = logs.length;
     if (!logs || logsLength < 3) {
       return null;
@@ -137,9 +126,9 @@ export class ScanService{
       }
     }
     return null;
-  }
+  }*/
 
-  async parseTx(txHash: string) {
+/*  async parseTx(txHash: string) {
     const transaction = await this.provider.getParsedTransaction(txHash, { maxSupportedTransactionVersion: 0 });
     //console.log(transaction);
     if(transaction?.meta?.logMessages){
@@ -154,9 +143,9 @@ export class ScanService{
         console.log();
       }
     }
-  }
+  }*/
 
-  async parseBlock(slot:number){
+/*  async parseBlock(slot:number){
     const start = process.hrtime();
     const resp = await this.provider.getBlock(slot, { maxSupportedTransactionVersion: 0, rewards: false })
     //const resp = await this.getBlock(slot)
@@ -173,15 +162,15 @@ export class ScanService{
     await this.saveDataBucket(bucket)
     const end = process.hrtime(start);
     this.logger.log(`Parse block: slot:${slot},cost: ${end[0]+'.'+end[1]+'s'} tradeEvent: ${bucket.pfTradeList.length}, createEvent: ${bucket.pfCreateList.length}`)
-  }
+  }*/
 
 
-  async parseTx2(txHash: string) {
+/*  async parseTx2(txHash: string) {
     console.log("txHash", txHash);
     //const transaction = await this.provider.getParsedTransaction(txHash, { maxSupportedTransactionVersion: 0 });
     //console.log(transaction);
     //if(transaction?.meta?.logMessages){
-/*    const logs =  [
+/!*    const logs =  [
         'Program VFeesufQJnGunv2kBXDYnThT1CoAYB45U31qGDe5QjU invoke [1]',
         'Program log: Instruction: RecordSolBalance',
         'Program 11111111111111111111111111111111 invoke [2]',
@@ -210,7 +199,7 @@ export class ScanService{
         'Program 11111111111111111111111111111111 success',
         'Program VFeesufQJnGunv2kBXDYnThT1CoAYB45U31qGDe5QjU consumed 7428 of 106758 compute units',
         'Program VFeesufQJnGunv2kBXDYnThT1CoAYB45U31qGDe5QjU success'
-      ]*/
+      ]*!/
     const logs =  [
       'Program ComputeBudget111111111111111111111111111111 invoke [1]',
       'Program ComputeBudget111111111111111111111111111111 success',
@@ -315,55 +304,55 @@ export class ScanService{
     this.eventParser.dealLogs(logs,txHash, 123456789, bucket)
     await this.saveDataBucket(bucket)
     //}
-  }
+  }*/
 
-  async tradeList() {
-/*    const transaction = await this.provider.getParsedTransaction(txHash, { maxSupportedTransactionVersion: 0 });
+/*  async tradeList() {
+/!*    const transaction = await this.provider.getParsedTransaction(txHash, { maxSupportedTransactionVersion: 0 });
     //console.log(transaction);
     if(transaction?.meta?.logMessages){
       this.eventParser.dealLogs(transaction?.meta?.logMessages, txHash)
-    }*/
+    }*!/
     const queryRunner = this.dataSource.createQueryRunner();
     return await queryRunner.manager.find(PfTrade, {
       where: { id: MoreThanOrEqual(6) },
     }).finally(()=>{
       queryRunner.release().catch(()=>{})
     })
-  }
+  }*/
 
-  async getLastSlot(): Promise<SolanaSlot> {
+/*  async getLastSlot(): Promise<SolanaSlot> {
     const latestSlots = await this.slotRepository.find({
       order: { id: 'DESC' },  // 按 id 降序排列
       take: 1,                // 限制返回 1 条记录
     })
 
-/*    const queryRunner = this.dataSource.createQueryRunner();
+/!*    const queryRunner = this.dataSource.createQueryRunner();
     const latestSlots = await queryRunner.manager.find(SolanaSlot, {
       order: { id: 'DESC' },  // 按 id 降序排列
       take: 1,                // 限制返回 1 条记录
     }).finally(()=>{
       queryRunner.release().catch(()=>{})
-    });*/
+    });*!/
     return latestSlots[0]
-  }
+  }*/
 
-  async getSlots(): Promise<SolanaSlot[]> {
+/*  async getSlots(): Promise<SolanaSlot[]> {
     return await this.slotRepository.find({
       where: { status: 0 }, //未处理的
       order: { id: 'ASC' }, //先处理最旧的
       take: this.taskSize
     })
-/*    const queryRunner = this.dataSource.createQueryRunner();
+/!*    const queryRunner = this.dataSource.createQueryRunner();
     return await queryRunner.manager.find(SolanaSlot, {
       where: { status: 0 }, //未处理的
       order: { id: 'ASC' }, //先处理最旧的
       take: this.taskSize
     }).finally(()=>{
       queryRunner.release().catch(()=>{})
-    })*/
-  }
+    })*!/
+  }*/
 
-  async sendTask(){
+/*  async sendTask(){
     const jobCount = await this.getJobsCount();
     if(jobCount > 3){
       return
@@ -378,9 +367,9 @@ export class ScanService{
         })
       await this.slotQueue.addBulk(tasks)
     }
-  }
+  }*/
 
-  async getJobsCount():Promise<number>{
+/*  async getJobsCount():Promise<number>{
     const pattern = BullQueueName.PREFIX+":"+BullQueueName.BET_QUEUE+":"+BullQueueName.JOB_ID+":*"
     return this.redisService.countKeysWithPattern(pattern)
   }
@@ -396,9 +385,9 @@ export class ScanService{
       order: { id: 'ASC' }, //先处理最旧的
       take: this.parsePfHashTaskSize
     })
-  }
+  }*/
 
-  async sendParsePfHashTask(){
+/*  async sendParsePfHashTask(){
     const key = this.redisService.combineKeyWithPrefix(RedisKeys.SEND_PARSE_PF_HASH_TASK_LOCK)
     const isLocked = await this.redisService.lockOnce(key, 180 * 1000).catch(e => {
       this.logger.warn("send parse pf hash task: cannot get distributed lock");
@@ -431,9 +420,9 @@ export class ScanService{
     } finally {
       await this.redisService.unLock(key)
     }
-  }
+  }*/
 
-  async dealParsePfHashTask(data: PfTxId){
+/*  async dealParsePfHashTask(data: PfTxId){
     const key = this.redisService.combineKeyWithPrefix(RedisKeys.PARSE_PF_HASH_LOCK+data.txId)
     const isLocked = await this.redisService.lockOnce(key, 20 * 1000).catch(e => {
       this.logger.warn("parse pf hash task: cannot get distributed lock");
@@ -462,9 +451,9 @@ export class ScanService{
       this.redisService.unLock(key)
       throw e
     }
-  }
+  }*/
 
-  async saveDataBucket(bucket:DataBucket) {
+/*  async saveDataBucket(bucket:DataBucket) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -498,10 +487,10 @@ export class ScanService{
       // you need to release a queryRunner which was manually instantiated
       await queryRunner.release().catch(()=>{});
     }
-  }
+  }*/
 
 
-  async updatePfHashRecordStatus(pfHashRecordId:number) {
+/*  async updatePfHashRecordStatus(pfHashRecordId:number) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -517,10 +506,10 @@ export class ScanService{
       // you need to release a queryRunner which was manually instantiated
       await queryRunner.release().catch(()=>{});
     }
-  }
+  }*/
 
 
-  async saveDataBucketWithDistributedLock(bucket:DataBucket, lockSuffix:string) {
+/*  async saveDataBucketWithDistributedLock(bucket:DataBucket, lockSuffix:string) {
     const key = this.redisService.combineKeyWithPrefix(RedisKeys.INSERT_DATA_BUCKET_LOCK+lockSuffix)
     const isLocked = await this.redisService.lockOnce(key, 120 * 1000).catch(e => {
       this.logger.warn("save DataBucket: cannot get distributed lock");
@@ -538,9 +527,9 @@ export class ScanService{
         throw err
       }
     }
-  }
+  }*/
 
-  async saveTrade(trade: PfTrade) {
+/*  async saveTrade(trade: PfTrade) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -556,9 +545,9 @@ export class ScanService{
       // you need to release a queryRunner which was manually instantiated
       await queryRunner.release().catch(()=>{});
     }
-  }
+  }*/
 
-  async batchAddSlot(list: SolanaSlot[]) {
+/*  async batchAddSlot(list: SolanaSlot[]) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -574,9 +563,9 @@ export class ScanService{
       // you need to release a queryRunner which was manually instantiated
       await queryRunner.release().catch(()=>{});
     }
-  }
+  }*/
 
-  listenerLog(){
+/*  listenerLog(){
     const enable = this.configService.get('ENABLE_LISTENER_LOG')
     if(enable != 'true'){
       this.logger.warn('init listener log task is disabled')
@@ -596,13 +585,13 @@ export class ScanService{
     });
 
     return this.listenerLogSubscriptionId
-  }
+  }*/
 
-  async listenerLogEnd(){
+/*  async listenerLogEnd(){
     await this.provider.removeOnLogsListener(this.listenerLogSubscriptionId)
-  }
+  }*/
 
-  async initMergeTrade(){
+/*  async initMergeTrade(){
     const enable = this.configService.get('ENABLE_MERGE_TRADE_TASK')
     if(enable != 'true'){
       this.logger.warn('init merge trade task is disabled')
@@ -611,35 +600,35 @@ export class ScanService{
     this.recursionMergeTrade()
     this.recursionMergeTradeClip()
     this.recursionMergeToken()
-  }
-  async recursionMergeTrade(){
+  }*/
+/*  async recursionMergeTrade(){
     await this.mergeTrade().finally(()=>{
       Utils.sleep(2000).finally(()=>{
        this.recursionMergeTrade()
       })
     })
-  }
+  }*/
 
-  async recursionMergeTradeClip(){
+/*  async recursionMergeTradeClip(){
     await this.mergeTradeClip().finally(()=>{
       Utils.sleep(5000).finally(()=>{
         this.recursionMergeTrade()
       })
     })
-  }
+  }*/
 
-  async recursionMergeToken(){
+/*  async recursionMergeToken(){
     await this.mergeToken().finally(()=>{
       Utils.sleep(5000).finally(()=>{
         this.recursionMergeTrade()
       })
     })
-  }
+  }*/
 
-  async refreshConfigs(){
+/*  async refreshConfigs(){
     await this.configRepository.find({ where: { status: 0 } });
-  }
-  async mergeTrade(){
+  }*/
+/*  async mergeTrade(){
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
@@ -737,10 +726,10 @@ export class ScanService{
       await queryRunner.release().catch(()=>{})
     }
 
-  }
+  }*/
 
 
-  async mergeTradeClip(){
+/*  async mergeTradeClip(){
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
@@ -791,9 +780,9 @@ export class ScanService{
     } finally {
       await queryRunner.release().catch(()=>{})
     }
-  }
+  }*/
 
-  async mergeToken(){
+/*  async mergeToken(){
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
@@ -887,9 +876,9 @@ export class ScanService{
     } finally {
       await queryRunner.release().catch(()=>{})
     }
-  }
+  }*/
 
-  async initMergePfHashTask(){
+/*  async initMergePfHashTask(){
     const enable = this.configService.get('ENABLE_MERGE_PF_HASH_TASK')
     if(enable != 'true'){
       this.logger.warn('init merge pf hash task is disabled')
@@ -916,7 +905,7 @@ export class ScanService{
          } as PfHashTaskData)
       }
     }
-/*    const tasks = resp.map(conf => {
+/!*    const tasks = resp.map(conf => {
       return this.makePfHashTask({
         id: conf.id,
         beforeTxId: conf.beforeTxId,
@@ -924,16 +913,16 @@ export class ScanService{
         endBlockNumber: conf.endBlockNumber
       } as PfHashTaskData);
     })
-    await this.slotQueue.addBulk(tasks)*/
-  }
+    await this.slotQueue.addBulk(tasks)*!/
+  }*/
 
-  async recursionMergePfHashTask(task: PfHashTaskData){
+/*  async recursionMergePfHashTask(task: PfHashTaskData){
      const newTask = await this.dealPfHashTask(task)
     if(newTask){
       this.recursionMergePfHashTask(newTask)
     }
-  }
-  async dealPfHashTask(task: PfHashTaskData):Promise<PfHashTaskData> {
+  }*/
+/*  async dealPfHashTask(task: PfHashTaskData):Promise<PfHashTaskData> {
     const queryRunner = this.dataSource.createQueryRunner();
     let newTask = null
     //let dealSuccess = false;
@@ -986,15 +975,15 @@ export class ScanService{
     } finally {
       await queryRunner.release().catch(()=>{})
       //失败重试
-/*      if(!dealSuccess){
+/!*      if(!dealSuccess){
         this.slotQueue.addBulk([this.makePfHashTask(task)])
       }else if(dealSuccess && newTask){
         this.slotQueue.addBulk([this.makePfHashTask(newTask)])
-      }*/
+      }*!/
     }
-  }
+  }*/
 
-  async recursionPfCreateFromDuneTask(){
+/*  async recursionPfCreateFromDuneTask(){
     this.dealPfCreateFromDuneTask().then(async () => {
       //await Utils.sleep(1000)
       this.recursionPfCreateFromDuneTask()
@@ -1002,9 +991,9 @@ export class ScanService{
       await Utils.sleep(10000)
       this.recursionPfCreateFromDuneTask()
     })
-  }
+  }*/
 
-  async dealPfCreateFromDuneTask():Promise<number> {
+/*  async dealPfCreateFromDuneTask():Promise<number> {
     const queryRunner = this.dataSource.createQueryRunner();
     let newPageNo = 0
     //let dealSuccess = false;
@@ -1058,7 +1047,7 @@ export class ScanService{
     } finally {
       await queryRunner.release().catch(()=>{})
     }
-  }
+  }*/
 
 
 

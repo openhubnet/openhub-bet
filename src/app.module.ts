@@ -9,21 +9,14 @@ import { AppController } from './app.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
-import { PfTrade } from './entities/PfTrade';
-import { PfCreate } from './entities/PfCreate';
 import { BullQueueName } from './config/constants';
-import { SolanaSlot } from './entities/SolanaSlot';
 import { WorkerService } from './service/worker.service';
 import { BullModule } from '@nestjs/bullmq';
 import { HttpModule } from '@nestjs/axios';
-import { UserTrade } from './entities/UserTrade';
-import { UserToken } from './entities/UserToken';
-import { PfTxId } from './entities/PfTxId';
-import { PfTxConf } from './entities/PfTxConf';
 import { Config } from './entities/Config';
 import { AxiosService } from './service/axios.service';
 import { DynamicConfigService } from './service/dynamic.config.service';
-import { UserClip } from './entities/UserClip';
+import { IpfsService } from './service/ipfs.service'
 const env = process.env.NODE_ENV || 'development'; // 默认加载 development 环境
 
 @Module({
@@ -32,7 +25,7 @@ const env = process.env.NODE_ENV || 'development'; // 默认加载 development �
     ConfigModule.forRoot({
       envFilePath: ['.env', `.env.${env}`],
     }),
-    TypeOrmModule.forFeature([PfTrade, PfCreate, SolanaSlot, UserTrade, UserToken, PfTxId, PfTxConf, Config, UserClip]),
+    TypeOrmModule.forFeature([Config]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -65,7 +58,7 @@ const env = process.env.NODE_ENV || 'development'; // 默认加载 development �
       name: BullQueueName.BET_QUEUE,
     }),
     ScheduleModule.forRoot()],
-  providers: [AppService, RedisService, TaskService, ScanService, WorkerService, AxiosService, DynamicConfigService],
+  providers: [AppService, RedisService, TaskService, ScanService, WorkerService, AxiosService, DynamicConfigService,IpfsService],
   controllers: [AppController],
 })
 export class AppModule {

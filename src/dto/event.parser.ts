@@ -6,8 +6,8 @@ import pumpIDL from "../config/contract/idl/pump.json";
 import {PumpType} from "../config/contract/types/pump";
 import { IdlCoder } from "@coral-xyz/anchor/dist/cjs/coder/borsh/idl";
 import { PROGRAM_LOG_PARAMS} from "../config/constants";
-import { PfTrade } from '../entities/PfTrade';
-import { PfCreate } from '../entities/PfCreate';
+//import { PfTrade } from '../entities/PfTrade';
+//import { PfCreate } from '../entities/PfCreate';
 import { DataBucket } from './DataBucket';
 import { PF_LOG_PREFIX, PF_LOG_SUCCESS } from './common.dto';
 import Utils from '../utils';
@@ -86,7 +86,7 @@ export class EventParser {
               null, 2,
             ));*/
             if(eventLayout.name === "tradeEvent"){
-                const pft = new PfTrade()
+/*                const pft = new PfTrade()
                 pft.mint = data.mint.toString()
                 pft.solAmount = data.solAmount.toString()
                 pft.tokenAmount = data.tokenAmount.toString()
@@ -96,10 +96,10 @@ export class EventParser {
                 pft.txId = txId
                 pft.blockNumber = blockNumber
                 pft.status = 0
-                bucket.addPfTrade(pft)
+                bucket.addPfTrade(pft)*/
                 //console.log(pft)
             }else if(eventLayout.name === "createEvent"){
-                const pfc = new PfCreate()
+/*                const pfc = new PfCreate()
                 pfc.mint = data.mint.toString()
                 pfc.bondingCurve = data.bondingCurve.toString()
                 pfc.userAdr = data.user.toString()
@@ -109,7 +109,7 @@ export class EventParser {
                 pfc.txId = txId
                 pfc.blockNumber = blockNumber
                 pfc.status = 0
-                bucket.addPfCreate(pfc)
+                bucket.addPfCreate(pfc)*/
                 //console.log(pfc)
             }
         }
